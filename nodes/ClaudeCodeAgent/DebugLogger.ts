@@ -8,9 +8,19 @@ export class DebugLogger {
 
     constructor(enabled: boolean = false) {
         this.enabled = enabled;
-        // Use logs directory in current working directory or temp directory
-        const cwd = process.cwd();
-        this.logDir = path.join(cwd, 'logs');
+
+        // Determine log directory with priority:
+        // 1. Environment variable CLAUDE_AGENT_LOG_DIR
+        // 2. Home directory ~/claude-agent-logs
+        // 3. Current working directory /logs (fallback)
+        if (process.env.CLAUDE_AGENT_LOG_DIR) {
+            this.logDir = process.env.CLAUDE_AGENT_LOG_DIR;
+        } else if (process.env.HOME) {
+            this.logDir = path.join(process.env.HOME, 'claude-agent-logs');
+        } else {
+            const cwd = process.cwd();
+            this.logDir = path.join(cwd, 'logs');
+        }
 
         if (this.enabled) {
             // Create debug directory if it doesn't exist

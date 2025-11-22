@@ -54,7 +54,14 @@ The credentials support custom base URLs via the `ANTHROPIC_BASE_URL` environmen
 
 ## Debug Logging
 
-When verbose mode is enabled, detailed logs are written to `/logs/debug-<timestamp>.log`:
+Detailed debug logs are automatically written to help troubleshoot and monitor agent behavior. 
+
+**Log Location** (in priority order):
+1. Custom: Set `CLAUDE_AGENT_LOG_DIR` environment variable
+2. Default: `~/claude-agent-logs/debug-<timestamp>.log`
+3. Fallback: `<working-directory>/logs/`
+
+**What's Logged:**
 - Configuration and parameters
 - Tool schema extraction details
 - MCP server status
@@ -62,7 +69,13 @@ When verbose mode is enabled, detailed logs are written to `/logs/debug-<timesta
 - Tool invocation traces with arguments and results
 - Error details and stack traces
 
-Check the logs directory after execution for troubleshooting and monitoring.
+**Quick Start:**
+```bash
+# View latest log in real-time
+ls -t ~/claude-agent-logs/debug-*.log | head -1 | xargs tail -f
+```
+
+For detailed logging documentation, see [LOGGING.md](./LOGGING.md).
 
 ## Compatibility
 

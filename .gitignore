@@ -15,4 +15,5 @@ package-lock.json
 temp/
 tmp/
 logs/*.log
+logs/
 
