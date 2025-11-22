@@ -1,26 +1,42 @@
-import type {
+import {
     IExecuteFunctions,
     INodeExecutionData,
     INodeType,
     INodeTypeDescription,
+    NodeConnectionTypes,
     ILoadOptionsFunctions,
     INodePropertyOptions,
+    NodeOperationError,
 } from 'n8n-workflow';
-import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { query, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
+import { adaptToMcpTools } from './McpToolAdapter';
+import { DebugLogger } from './DebugLogger';
 
 export class ClaudeCodeAgent implements INodeType {
     description: INodeTypeDescription = {
         displayName: 'Claude Code Agent',
         name: 'claudeCodeAgent',
-        icon: { light: 'file:claudeCodeAgent.svg', dark: 'file:claudeCodeAgent.dark.svg' },
+        icon: 'file:claude.svg',
         group: ['transform'],
         version: 1,
-        description: 'Agent powered by Claude Code SDK',
+        description: 'Use the Claude Code SDK to run an AI agent',
         defaults: {
             name: 'Claude Code Agent',
         },
-        inputs: [NodeConnectionTypes.Main],
+        inputs: [
+            {
+                displayName: '',
+                type: NodeConnectionTypes.Main,
+            },
+            {
+                displayName: 'Memory',
+                type: NodeConnectionTypes.AiMemory,
+            },
+            {
+                displayName: 'Tools',
+                type: NodeConnectionTypes.AiTool,
+            },
+        ],
         outputs: [NodeConnectionTypes.Main],
         credentials: [
             {
@@ -64,6 +80,13 @@ export class ClaudeCodeAgent implements INodeType {
                         type: 'string',
                         default: '',
                         description: 'System message to send to the agent',
+                    },
+                    {
+                        displayName: 'Max Turns',
+                        name: 'maxTurns',
+                        type: 'number',
+                        default: 30,
+                        description: 'Maximum number of conversational turns the agent can take',
                     },
                     {
                         displayName: 'Verbose',
@@ -129,30 +152,138 @@ export class ClaudeCodeAgent implements INodeType {
             process.env.ANTHROPIC_BASE_URL = credentials.url as string;
         }
 
+        if (!process.env.ANTHROPIC_API_KEY) {
+            throw new NodeOperationError(this.getNode(), 'Anthropic API Key is missing. Please check your credentials.');
+        }
+
         for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+            let mcpServer;
+            let toolsCount = 0;
+            const logger = new DebugLogger(true); // Always enable for debugging
+
+            console.log('[ClaudeCodeAgent] Logger created, log path:', logger.getLogPath());
+            logger.logSection(`Processing Item ${itemIndex}`);
+
             try {
                 const prompt = this.getNodeParameter('text', itemIndex, '') as string;
                 const model = this.getNodeParameter('model', itemIndex, 'claude-3-5-sonnet-20241022') as string;
                 const options = this.getNodeParameter('options', itemIndex, {}) as {
                     systemMessage?: string;
+                    maxTurns?: number;
                     verbose?: boolean;
                 };
 
+                logger.log('Retrieved parameters', {
+                    promptLength: prompt.length,
+                    promptPreview: prompt.length > 0 ? prompt.substring(0, 100) + '...' : '[EMPTY]',
+                    model,
+                    options
+                });
+
+                // Validate prompt is not empty
+                if (!prompt || prompt.trim().length === 0) {
+                    throw new NodeOperationError(
+                        this.getNode(),
+                        'The "Text" parameter is required and cannot be empty. Please provide a prompt for the agent.'
+                    );
+                }
+
+                // Handle Memory
+                let finalPrompt = prompt;
+                try {
+                    const memory = (await this.getInputConnectionData(NodeConnectionTypes.AiMemory, itemIndex)) as any;
+                    if (memory && typeof memory.getMessages === 'function') {
+                        const messages = await memory.getMessages();
+                        if (Array.isArray(messages) && messages.length > 0) {
+                            const history = messages.map((m: any) => {
+                                // Attempt to determine role (human/ai/system)
+                                let role = 'User';
+                                if (m._getType) {
+                                    const type = m._getType();
+                                    if (type === 'ai') role = 'Assistant';
+                                    else if (type === 'system') role = 'System';
+                                } else if (m.type) {
+                                    if (m.type === 'ai') role = 'Assistant';
+                                    else if (m.type === 'system') role = 'System';
+                                }
+                                return `${role}: ${m.content}`;
+                            }).join('\n');
+
+                            if (history) {
+                                finalPrompt = `Here is the conversation history:\n${history}\n\nCurrent request:\n${prompt}`;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    // Ignore memory errors and proceed with just the prompt
+                    console.warn('Failed to retrieve or process memory:', error);
+                }
+
+                // Handle Tools
+                logger.logSection('Tool Processing');
+                try {
+                    const tools = (await this.getInputConnectionData(NodeConnectionTypes.AiTool, itemIndex)) as any[];
+                    if (tools && tools.length > 0) {
+                        toolsCount = tools.length;
+                        logger.log(`Found ${toolsCount} tools`, tools.map((t: any) => ({ name: t.name, description: t.description })));
+
+                        const sdkTools = await adaptToMcpTools(tools, options.verbose, logger);
+                        logger.log('Tools adapted to MCP format');
+
+                        mcpServer = createSdkMcpServer({
+                            name: 'n8n-tools',
+                            tools: sdkTools,
+                        });
+                        logger.log('MCP server created successfully');
+                    } else {
+                        logger.log('No tools connected');
+                    }
+                } catch (error) {
+                    console.warn('Failed to process tools:', error);
+                }
+
+                // Log configuration before execution
+                logger.logSection('SDK Query Configuration');
+                const config = {
+                    model,
+                    systemPrompt: options.systemMessage ? 'Set' : 'Not set',
+                    maxTurns: options.maxTurns,
+                    mcpServer: mcpServer ? 'Created' : 'Not created',
+                    toolsCount,
+                    apiKeyPresent: !!process.env.ANTHROPIC_API_KEY,
+                    baseUrl: process.env.ANTHROPIC_BASE_URL,
+                    promptLength: finalPrompt.length,
+                };
+                logger.log('Configuration', config);
+
+                if (options.verbose) {
+                    console.log('[ClaudeCodeAgent] Configuration:', config);
+                }
+
                 // Execute the Claude Code Agent
+                logger.log('Starting SDK query...');
                 const generator = query({
-                    prompt,
+                    prompt: finalPrompt,
                     options: {
                         model,
                         systemPrompt: options.systemMessage,
+                        maxTurns: options.maxTurns,
                         // Using bypassPermissions to allow automation without interaction
                         permissionMode: 'bypassPermissions',
+                        mcpServers: mcpServer ? { 'n8n': mcpServer } : undefined,
                     },
                 });
 
                 let finalResult: string | undefined;
                 const logs: string[] = [];
+                let messageCount = 0;
+
+                logger.logSection('Processing SDK Messages');
 
                 for await (const message of generator) {
+                    messageCount++;
+                    logger.log(`Message ${messageCount}:`, message);
+
                     if (options.verbose) {
                         logs.push(JSON.stringify(message));
                     }
@@ -166,12 +297,15 @@ export class ClaudeCodeAgent implements INodeType {
                     }
                 }
 
+                logger.log(`Processed ${messageCount} messages total`);
+
                 if (finalResult === undefined) {
+                    logger.logError('No result received', new Error('Agent finished without result'));
                     throw new Error('Claude Code Agent finished without a result.');
                 }
 
-                const jsonResult: { result: string; logs?: string[] } = {
-                    result: finalResult,
+                const jsonResult: { output: string; logs?: string[] } = {
+                    output: finalResult,
                 };
 
                 if (options.verbose) {
@@ -186,14 +320,33 @@ export class ClaudeCodeAgent implements INodeType {
                 });
 
             } catch (error) {
+                // Enhanced Error Logging
+                logger.logError('Execution failed', error);
+
+                const errorDetails = {
+                    message: error.message,
+                    stack: error.stack,
+                    code: error.code,
+                    context: error.context,
+                    apiKeyPresent: !!process.env.ANTHROPIC_API_KEY,
+                    baseUrl: process.env.ANTHROPIC_BASE_URL,
+                    toolsCount,
+                    logFile: logger.getLogPath(),
+                };
+                console.error('[ClaudeCodeAgent] Execution Error:', JSON.stringify(errorDetails, null, 2));
+
                 if (this.continueOnFail()) {
-                    returnData.push({ json: { error: error.message }, error, pairedItem: itemIndex });
+                    returnData.push({ json: { error: error.message, details: errorDetails }, error, pairedItem: itemIndex });
                 } else {
                     if (error.context) {
                         error.context.itemIndex = itemIndex;
                         throw error;
                     }
-                    throw new NodeOperationError(this.getNode(), error, {
+                    // Include more details in the thrown error
+                    const enhancedError = new Error(`Claude Code Agent failed: ${error.message}. Check n8n logs for details.`);
+                    enhancedError.stack = error.stack;
+
+                    throw new NodeOperationError(this.getNode(), enhancedError, {
                         itemIndex,
                     });
                 }
