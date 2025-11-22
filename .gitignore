@@ -1,1 +1,18 @@
-node_modules
+# .gitignore
+dist/
+node_modules/
+*.tsbuildinfo
+.DS_Store
+.idea
+*.log
+*.swp
+*.swo
+*~
+.vscode/settings.json
+package-lock.json
+.npmrc
+.env
+temp/
+tmp/
+logs/*.log
+
