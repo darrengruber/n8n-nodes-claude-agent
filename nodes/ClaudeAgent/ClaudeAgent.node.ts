@@ -45,22 +45,76 @@ export class ClaudeAgent implements INodeType {
             },
         ],
         outputs: [NodeConnectionTypes.Main],
-        credentials: [
-            {
-                name: 'anthropicApi',
-                required: true,
-            },
-        ],
         properties: [
             {
-                displayName: 'Text',
+                displayName: 'Source for Prompt (User Message)',
+                name: 'promptType',
+                type: 'options',
+                options: [
+                    {
+                        name: 'Connected Chat Trigger Node',
+                        value: 'auto',
+                        description:
+                            "Looks for an input field called 'chatInput' that is coming from a directly connected Chat Trigger",
+                    },
+                    {
+                        name: 'Connected Guardrails Node',
+                        value: 'guardrails',
+                        description:
+                            "Looks for an input field called 'guardrailsInput' that is coming from a directly connected Guardrails Node",
+                    },
+                    {
+                        name: 'Define below',
+                        value: 'define',
+                        description: 'Use an expression to reference data in previous nodes or enter static text',
+                    },
+                ],
+                default: 'auto',
+            },
+            {
+                displayName: 'Prompt (User Message)',
                 name: 'text',
                 type: 'string',
-                default: '',
-                placeholder: 'What would you like the agent to do?',
-                description: 'The instruction for the agent',
+                required: true,
+                default: '={{ $json.chatInput }}',
                 typeOptions: {
-                    rows: 4,
+                    rows: 2,
+                },
+                displayOptions: {
+                    show: {
+                        promptType: ['auto'],
+                    },
+                },
+            },
+            {
+                displayName: 'Prompt (User Message)',
+                name: 'text',
+                type: 'string',
+                required: true,
+                default: '={{ $json.guardrailsInput }}',
+                typeOptions: {
+                    rows: 2,
+                },
+                displayOptions: {
+                    show: {
+                        promptType: ['guardrails'],
+                    },
+                },
+            },
+            {
+                displayName: 'Prompt (User Message)',
+                name: 'text',
+                type: 'string',
+                required: true,
+                default: '',
+                placeholder: 'e.g. Hello, how can you help me?',
+                typeOptions: {
+                    rows: 2,
+                },
+                displayOptions: {
+                    show: {
+                        promptType: ['define'],
+                    },
                 },
             },
             {
@@ -76,6 +130,9 @@ export class ClaudeAgent implements INodeType {
                         type: 'string',
                         default: '',
                         description: 'System message to send to the agent',
+                        typeOptions: {
+                            rows: 4,
+                        },
                     },
                     {
                         displayName: 'Max Turns',
@@ -109,24 +166,6 @@ export class ClaudeAgent implements INodeType {
     async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
         const items = this.getInputData();
         const returnData: INodeExecutionData[] = [];
-
-        // Retrieve credentials
-        const credentials = await this.getCredentials('anthropicApi');
-
-        if (credentials?.apiKey) {
-            process.env.ANTHROPIC_API_KEY = credentials.apiKey as string;
-        }
-
-        if (credentials?.baseUrl) {
-            process.env.ANTHROPIC_BASE_URL = credentials.baseUrl as string;
-        } else if (credentials?.url) {
-            // Fallback if credential uses 'url' instead of 'baseUrl'
-            process.env.ANTHROPIC_BASE_URL = credentials.url as string;
-        }
-
-        if (!process.env.ANTHROPIC_API_KEY) {
-            throw new NodeOperationError(this.getNode(), 'Anthropic API Key is missing. Please check your credentials.');
-        }
 
         for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
             let toolsCount = 0;
