@@ -16,7 +16,7 @@ export class ClaudeCodeAgent implements INodeType {
     description: INodeTypeDescription = {
         displayName: 'Claude Code Agent',
         name: 'claudeCodeAgent',
-        icon: 'file:claudeCodeAgent.svg',
+        icon: 'file:img/claudeCodeAgent.svg',
         group: ['transform'],
         version: 1,
         description: 'Use the Claude Code SDK to run an AI agent',
@@ -328,7 +328,8 @@ export class ClaudeCodeAgent implements INodeType {
 
                 for await (const message of generator) {
                     messageCount++;
-                    logger.log(`Message ${messageCount}:`, message);
+                    // Use logTurn to capture the message for markdown generation
+                    logger.logTurn(message);
 
                     if (options.verbose) {
                         logs.push(JSON.stringify(message));
@@ -344,6 +345,9 @@ export class ClaudeCodeAgent implements INodeType {
                 }
 
                 logger.log(`Processed ${messageCount} messages total`);
+
+                // Generate the markdown log file
+                logger.finalize();
 
                 if (finalResult === undefined) {
                     logger.logError('No result received', new Error('Agent finished without result'));

@@ -1,10 +1,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { formatTurnsFromData } from './ClaudeFormatTurns';
 
 export class DebugLogger {
     private logDir: string;
     private logFile: string = '';
     private enabled: boolean;
+
+    private turns: any[] = [];
 
     constructor(enabled: boolean = false) {
         this.enabled = enabled;
@@ -57,6 +60,37 @@ export class DebugLogger {
             console.log(`[DebugLogger] ${message}`);
         } catch (error) {
             console.error('[DebugLogger] Failed to write log:', error);
+        }
+    }
+
+    logTurn(turn: any) {
+        if (!this.enabled) return;
+
+        // Add to turns collection for markdown generation
+        this.turns.push(turn);
+
+        // Also log to standard log file
+        this.log('Turn received:', turn);
+    }
+
+    finalize() {
+        if (!this.enabled || this.turns.length === 0) return;
+
+        try {
+            // Generate markdown content
+            // We need to dynamically import or require the utility since it might be outside the nodes directory structure
+            // depending on how n8n loads nodes. For now, we'll try to use the imported function.
+            // Note: In a real n8n node environment, we might need to bundle this utility or handle it differently.
+            // Assuming the build process handles the import correctly.
+            const markdown = formatTurnsFromData(this.turns);
+
+            // Create markdown file path (same as log file but .md)
+            const mdFile = this.logFile.replace('.log', '.md');
+
+            fs.writeFileSync(mdFile, markdown);
+            this.log(`Markdown log generated: ${mdFile}`);
+        } catch (error) {
+            this.logError('Failed to generate markdown log', error);
         }
     }
 
