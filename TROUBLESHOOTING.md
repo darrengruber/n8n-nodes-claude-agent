@@ -17,7 +17,7 @@ The node fails with error: `Claude Code process exited with code 1`
 
 1. **Enable Verbose Mode**: In the node options, enable "Verbose" to see detailed logs in the n8n console.
 
-2. **Check n8n Logs**: The detailed error logs will be printed to the n8n console with the `[ClaudeCodeAgent]` prefix.
+2. **Check n8n Logs**: The detailed error logs will be printed to the n8n console with the `[ClaudeAgent]` prefix.
 
 3. **Test Without Tools**: Disconnect any tool inputs to see if the issue is related to MCP tool server creation.
 

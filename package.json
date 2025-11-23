@@ -1,8 +1,8 @@
 {
-    "name": "n8n-nodes-claude-code-agent",
+    "name": "n8n-nodes-claude-agent",
     "version": "0.2.1-dev.0",
     "type": "module",
-    "description": "n8n node for Claude Code Agent - Execute Claude commands and workflows with enhanced MCP tool support",
+    "description": "n8n node for Claude Agent - Execute Claude commands and workflows with enhanced MCP tool support",
     "license": "MIT",
     "homepage": "",
     "keywords": [
@@ -14,7 +14,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/darrengruber/n8n-nodes-claude-code.git"
+        "url": "https://github.com/darrengruber/n8n-nodes-claude-agent.git"
     },
     "scripts": {
         "build": "n8n-node build",
@@ -32,7 +32,7 @@
         "strict": true,
         "credentials": [],
         "nodes": [
-            "dist/nodes/ClaudeCodeAgent/ClaudeCodeAgent.node.js"
+            "dist/nodes/ClaudeAgent/ClaudeAgent.node.js"
         ]
     },
     "devDependencies": {

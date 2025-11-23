@@ -4,29 +4,36 @@ import {
     INodeType,
     INodeTypeDescription,
     NodeConnectionTypes,
-    ILoadOptionsFunctions,
-    INodePropertyOptions,
     NodeOperationError,
 } from 'n8n-workflow';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { processToolsForAgent } from './McpToolAdapter';
 import { DebugLogger } from './DebugLogger';
 
-export class ClaudeCodeAgent implements INodeType {
+export class ClaudeAgent implements INodeType {
     description: INodeTypeDescription = {
-        displayName: 'Claude Code Agent',
-        name: 'claudeCodeAgent',
-        icon: 'file:img/claudeCodeAgent.svg',
+        displayName: 'Claude Agent',
+        name: 'claudeAgent',
+        icon: 'file:img/claudeAgent.svg',
         group: ['transform'],
         version: 1,
         description: 'Use the Claude Code SDK to run an AI agent',
         defaults: {
-            name: 'Claude Code Agent',
+            name: 'Claude Agent',
         },
         inputs: [
             {
                 displayName: '',
                 type: NodeConnectionTypes.Main,
+            },
+            {
+                displayName: 'Chat Model',
+                type: NodeConnectionTypes.AiLanguageModel,
+                required: true,
+                maxConnections: 1,
+                filter: {
+                    nodes: ['@n8n/n8n-nodes-langchain.lmChatAnthropic'],
+                },
             },
             {
                 displayName: 'Memory',
@@ -55,17 +62,6 @@ export class ClaudeCodeAgent implements INodeType {
                 typeOptions: {
                     rows: 4,
                 },
-            },
-            {
-                displayName: 'Model',
-                name: 'model',
-                type: 'options',
-                typeOptions: {
-                    loadOptionsMethod: 'getModels',
-                },
-                default: 'claude-3-5-sonnet-20241022',
-                description: 'The model to use',
-                options: [],
             },
             {
                 displayName: 'Options',
@@ -108,39 +104,7 @@ export class ClaudeCodeAgent implements INodeType {
         ],
     };
 
-    methods = {
-        loadOptions: {
-            async getModels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-                const credentials = await this.getCredentials('anthropicApi');
-                const apiKey = credentials.apiKey as string;
-                const baseUrl = (credentials.baseUrl as string) || (credentials.url as string) || 'https://api.anthropic.com';
 
-                try {
-                    const response = await this.helpers.request({
-                        method: 'GET',
-                        url: `${baseUrl}/v1/models`,
-                        headers: {
-                            'x-api-key': apiKey,
-                            'anthropic-version': '2023-06-01',
-                        },
-                        json: true,
-                    });
-
-                    return (response.data as Array<{ id: string; display_name?: string }>).map((model) => ({
-                        name: model.display_name || model.id,
-                        value: model.id,
-                    }));
-                } catch (error) {
-                    // Fallback to default models if API call fails
-                    return [
-                        { name: 'Claude 3.5 Sonnet', value: 'claude-3-5-sonnet-20241022' },
-                        { name: 'Claude 3 Opus', value: 'claude-3-opus-20240229' },
-                        { name: 'Claude 3 Haiku', value: 'claude-3-haiku-20240307' },
-                    ];
-                }
-            },
-        },
-    };
 
     async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
         const items = this.getInputData();
@@ -168,12 +132,45 @@ export class ClaudeCodeAgent implements INodeType {
             let toolsCount = 0;
             const logger = new DebugLogger(true); // Always enable for debugging
 
-            console.log('[ClaudeCodeAgent] Logger created, log path:', logger.getLogPath());
+            console.log('[ClaudeAgent] Logger created, log path:', logger.getLogPath());
             logger.logSection(`Processing Item ${itemIndex}`);
 
             try {
                 const prompt = this.getNodeParameter('text', itemIndex, '') as string;
-                const model = this.getNodeParameter('model', itemIndex, 'claude-3-5-sonnet-20241022') as string;
+
+
+                // Retrieve the model from the AI Language Model input
+                const connectedModel = (await this.getInputConnectionData(NodeConnectionTypes.AiLanguageModel, itemIndex)) as any;
+
+                if (!connectedModel) {
+                    throw new NodeOperationError(
+                        this.getNode(),
+                        'Please connect an Anthropic Chat Model to the Chat Model input'
+                    );
+                }
+
+                // Validate that it's an Anthropic model by checking the class type
+                // ChatAnthropic models will have the constructor name 'ChatAnthropic'
+                const isAnthropic = connectedModel.constructor?.name === 'ChatAnthropic' ||
+                    connectedModel._llmType?.() === 'anthropic';
+
+                if (!isAnthropic) {
+                    throw new NodeOperationError(
+                        this.getNode(),
+                        'Only Anthropic Chat Models are supported. Please connect an Anthropic Chat Model node.'
+                    );
+                }
+
+                // Extract model name from the connected ChatAnthropic instance
+                // The ChatAnthropic class stores the model name in the 'model' property
+                const model = connectedModel.model;
+
+                logger.log('Retrieved model from Chat Model input', {
+                    model,
+                    modelType: connectedModel.constructor?.name,
+                    isAnthropic,
+                });
+
                 const options = this.getNodeParameter('options', itemIndex, {}) as {
                     systemMessage?: string;
                     maxTurns?: number;
@@ -293,10 +290,10 @@ export class ClaudeCodeAgent implements INodeType {
                 logger.log('Configuration', config);
 
                 if (options.verbose) {
-                    console.log('[ClaudeCodeAgent] Configuration:', config);
+                    console.log('[ClaudeAgent] Configuration:', config);
                 }
 
-                // Execute the Claude Code Agent
+                // Execute the Claude Agent
                 logger.log('Starting SDK query...');
                 const sdkOptions: any = {
                     model,
@@ -339,7 +336,7 @@ export class ClaudeCodeAgent implements INodeType {
                         if (message.subtype === 'success') {
                             finalResult = message.result;
                         } else if (message.subtype === 'error_during_execution' || message.subtype === 'error_max_turns' || message.subtype === 'error_max_budget_usd' || message.subtype === 'error_max_structured_output_retries') {
-                            throw new Error(`Claude Code Agent failed: ${message.subtype}. Errors: ${message.errors?.join(', ')}`);
+                            throw new Error(`Claude Agent failed: ${message.subtype}. Errors: ${message.errors?.join(', ')}`);
                         }
                     }
                 }
@@ -351,7 +348,7 @@ export class ClaudeCodeAgent implements INodeType {
 
                 if (finalResult === undefined) {
                     logger.logError('No result received', new Error('Agent finished without result'));
-                    throw new Error('Claude Code Agent finished without a result.');
+                    throw new Error('Claude Agent finished without a result.');
                 }
 
                 const jsonResult: { output: string; logs?: string[] } = {
@@ -383,7 +380,7 @@ export class ClaudeCodeAgent implements INodeType {
                     toolsCount,
                     logFile: logger.getLogPath(),
                 };
-                console.error('[ClaudeCodeAgent] Execution Error:', JSON.stringify(errorDetails, null, 2));
+                console.error('[ClaudeAgent] Execution Error:', JSON.stringify(errorDetails, null, 2));
 
                 if (this.continueOnFail()) {
                     returnData.push({ json: { error: error.message, details: errorDetails }, error, pairedItem: itemIndex });
@@ -393,7 +390,7 @@ export class ClaudeCodeAgent implements INodeType {
                         throw error;
                     }
                     // Include more details in the thrown error
-                    const enhancedError = new Error(`Claude Code Agent failed: ${error.message}. Check n8n logs for details.`);
+                    const enhancedError = new Error(`Claude Agent failed: ${error.message}. Check n8n logs for details.`);
                     enhancedError.stack = error.stack;
 
                     throw new NodeOperationError(this.getNode(), enhancedError, {

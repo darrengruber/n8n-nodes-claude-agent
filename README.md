@@ -1,6 +1,6 @@
-# Claude Code Agent - n8n Node
+# Claude Agent - n8n Node
 
-This n8n node integrates the Claude Code Agent SDK (`@anthropic-ai/claude-agent-sdk`), enabling powerful agentic AI workflows with tool support and memory.
+This n8n node integrates the Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`), enabling powerful agentic AI workflows with tool support and memory.
 
 ## Features
 
@@ -14,7 +14,7 @@ This n8n node integrates the Claude Code Agent SDK (`@anthropic-ai/claude-agent-
 ## Installation
 
 ```bash
-npm install n8n-nodes-claude-code-agent
+npm install n8n-nodes-claude-agent
 ```
 
 ## Configuration
@@ -32,7 +32,7 @@ The credentials support custom base URLs via the `ANTHROPIC_BASE_URL` environmen
 ## Usage
 
 ### Basic Setup
-1. Add the **Claude Code Agent** node to your workflow
+1. Add the **Claude Agent** node to your workflow
 2. Connect **Anthropic API** credentials
 3. Enter your prompt in the **Text** field
 4. Select your desired **Model**

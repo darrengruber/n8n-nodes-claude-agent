@@ -323,7 +323,7 @@ export async function adaptToMcpTools(tools: any[], verbose: boolean = false, lo
                 if (logger) {
                     logger.logError(`Tool ${t.name} execution failed`, err);
                 } else {
-                    console.error(`[ClaudeCodeAgent] Tool ${t.name} error:`, err);
+                    console.error(`[ClaudeAgent] Tool ${t.name} error:`, err);
                 }
                 return {
                     content: [{ type: 'text', text: `Error executing tool ${t.name}: ${err.message}` }],

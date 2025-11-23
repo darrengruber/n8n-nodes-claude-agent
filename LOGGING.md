@@ -1,4 +1,4 @@
-# Claude Code Agent - Debug Logging
+# Claude Agent - Debug Logging
 
 ## Log Location
 
@@ -8,7 +8,7 @@ Debug logs are written to timestamped files in the following locations (in prior
 Set the `CLAUDE_AGENT_LOG_DIR` environment variable to specify exactly where logs should be written:
 
 ```bash
-export CLAUDE_AGENT_LOG_DIR="/Users/darren/repos/n8n-nodes-claude-code-agent/logs"
+export CLAUDE_AGENT_LOG_DIR="/Users/darren/repos/n8n-nodes-claude-agent/logs"
 npm run dev
 ```
 
@@ -41,7 +41,7 @@ Each log file contains:
 
 Example log entry:
 ```
-[2025-11-22T18:46:51.071Z] === Claude Code Agent Debug Log ===
+[2025-11-22T18:46:51.071Z] === Claude Agent Debug Log ===
 [2025-11-22T18:46:51.072Z] Started at: 2025-11-22T18:46:51.072Z
 [2025-11-22T18:46:51.072Z] Log file: /Users/darren/claude-agent-logs/debug-2025-11-22T18-46-51.071Z.log
 [2025-11-22T18:46:51.072Z] Log directory: /Users/darren/claude-agent-logs
@@ -72,7 +72,7 @@ find ~/claude-agent-logs -name "debug-*.log" -mtime +7 -delete
 
 ## Enabling/Disabling Logging
 
-Logging is currently **always enabled** in the code for debugging purposes. To disable it, modify the ClaudeCodeAgent.node.ts file:
+Logging is currently **always enabled** in the code for debugging purposes. To disable it, modify the ClaudeAgent.node.ts file:
 
 ```typescript
 // Change this line:
@@ -91,5 +91,5 @@ When running `npm run dev`, if you haven't set the environment variable, logs wi
 
 To see where logs are being written, check the console output when the node executes:
 ```
-[ClaudeCodeAgent] Logger created, log path: /Users/darren/claude-agent-logs/debug-TIMESTAMP.log
+[ClaudeAgent] Logger created, log path: /Users/darren/claude-agent-logs/debug-TIMESTAMP.log
 ```

@@ -35,7 +35,7 @@ export class DebugLogger {
             const timestamp = new Date().toISOString().replace(/:/g, '-');
             this.logFile = path.join(this.logDir, `debug-${timestamp}.log`);
 
-            this.log('=== Claude Code Agent Debug Log ===');
+            this.log('=== Claude Agent Debug Log ===');
             this.log(`Started at: ${new Date().toISOString()}`);
             this.log(`Log file: ${this.logFile}`);
             this.log(`Log directory: ${this.logDir}`);
