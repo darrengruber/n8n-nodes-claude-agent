@@ -45,6 +45,11 @@ export class ClaudeAgent implements INodeType {
                 displayName: 'Tools',
                 type: NodeConnectionTypes.AiTool,
             },
+            {
+                displayName: 'Output Parser',
+                type: NodeConnectionTypes.AiOutputParser,
+                maxConnections: 1,
+            },
         ],
         outputs: [NodeConnectionTypes.Main],
         properties: [
@@ -159,6 +164,24 @@ export class ClaudeAgent implements INodeType {
                         description: 'The starting directory for the agent (optional, defaults to current directory)',
                     },
                 ],
+            },
+            {
+                displayName: 'Require Specific Output Format',
+                name: 'hasOutputParser',
+                type: 'boolean',
+                default: false,
+                noDataExpression: true,
+            },
+            {
+                displayName: `Connect an <a data-action='openSelectiveNodeCreator' data-action-parameter-connectiontype='${NodeConnectionTypes.AiOutputParser}'>output parser</a> on the canvas to specify the output format you require`,
+                name: 'notice',
+                type: 'notice',
+                default: '',
+                displayOptions: {
+                    show: {
+                        hasOutputParser: [true],
+                    },
+                },
             },
         ],
     };
@@ -278,8 +301,23 @@ export class ClaudeAgent implements INodeType {
                         }
                     }
                 } catch (error) {
-                    // Ignore memory errors and proceed with just the prompt
                     console.warn('Failed to retrieve or process memory:', error);
+                }
+
+                // Handle Output Parser
+                let outputParser: any;
+                try {
+                    outputParser = (await this.getInputConnectionData(NodeConnectionTypes.AiOutputParser, itemIndex)) as any;
+                } catch (error) {
+                    // Ignore if not connected
+                }
+
+                if (outputParser) {
+                    const formatInstructions = outputParser.getFormatInstructions();
+                    if (formatInstructions) {
+                        finalPrompt += `\n\n${formatInstructions}`;
+                        logger.log('Added output parser instructions to prompt');
+                    }
                 }
 
                 // Handle Tools
@@ -409,8 +447,20 @@ export class ClaudeAgent implements INodeType {
                     throw new Error('Claude Agent finished without a result.');
                 }
 
-                const jsonResult: { output: string; logs?: string[] } = {
-                    output: finalResult,
+                let output: any = finalResult;
+                if (outputParser) {
+                    try {
+                        logger.log('Parsing output with connected parser');
+                        output = await outputParser.parse(finalResult);
+                        logger.log('Output parsed successfully');
+                    } catch (error) {
+                        logger.logError('Output parsing failed', error);
+                        throw new NodeOperationError(this.getNode(), `Output parsing failed: ${error.message}`);
+                    }
+                }
+
+                const jsonResult: { output: any; logs?: string[] } = {
+                    output: output,
                 };
 
                 if (options.verbose) {
