@@ -6,11 +6,13 @@ export class DebugLogger {
     private logDir: string;
     private logFile: string = '';
     private enabled: boolean;
+    private prefix: string;
 
     private turns: any[] = [];
 
-    constructor(enabled: boolean = false) {
+    constructor(enabled: boolean = false, prefix: string = '') {
         this.enabled = enabled;
+        this.prefix = prefix;
 
         // Determine log directory with priority:
         // 1. Environment variable CLAUDE_AGENT_LOG_DIR
@@ -35,10 +37,10 @@ export class DebugLogger {
             const timestamp = new Date().toISOString().replace(/:/g, '-');
             this.logFile = path.join(this.logDir, `debug-${timestamp}.log`);
 
-            this.log('=== Claude Agent Debug Log ===');
-            this.log(`Started at: ${new Date().toISOString()}`);
-            this.log(`Log file: ${this.logFile}`);
-            this.log(`Log directory: ${this.logDir}`);
+            this.log(`${this.prefix}=== Claude Agent Debug Log ===`);
+            this.log(`${this.prefix}Started at: ${new Date().toISOString()}`);
+            this.log(`${this.prefix}Log file: ${this.logFile}`);
+            this.log(`${this.prefix}Log directory: ${this.logDir}`);
             this.log('');
         }
     }
@@ -47,7 +49,7 @@ export class DebugLogger {
         if (!this.enabled) return;
 
         const timestamp = new Date().toISOString();
-        let logEntry = `[${timestamp}] ${message}`;
+        let logEntry = `[${timestamp}] ${this.prefix}${message}`;
 
         if (data !== undefined) {
             logEntry += '\n' + JSON.stringify(data, null, 2);
@@ -98,9 +100,9 @@ export class DebugLogger {
         if (!this.enabled) return;
 
         const separator = '='.repeat(60);
-        this.log(`\n${separator}`);
-        this.log(title);
-        this.log(separator);
+        this.log(`${separator}`);
+        this.log(`${this.prefix}${title}`);
+        this.log(`${separator}`);
     }
 
     logError(message: string, error: any) {
