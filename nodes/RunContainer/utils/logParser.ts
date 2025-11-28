@@ -75,7 +75,7 @@ export function parseDockerLogs(logsBuffer: Buffer): ParsedLogEntry[] {
 
         // Extract data
         const data = logsBuffer.slice(dataStart, dataEnd);
-        const text = data.toString('utf8').replace(/\0/g, ''); // Remove all null characters
+        const text = data.toString('utf8').replace(/[\x00-\x1F\x7F]/g, ''); // Remove all control characters
 
         entries.push({
             stream: streamType as LogStreamType,

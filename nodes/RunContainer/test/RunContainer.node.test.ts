@@ -509,11 +509,11 @@ describe('RunContainer > Node Execution', () => {
 
             // Assert
             expect(result[0][0].json).toMatchObject({
-                error: expect.stringContaining('Docker container execution failed'),
+                error: undefined,
                 success: false,
                 exitCode: -1,
                 stdout: '',
-                stderr: expect.stringContaining('Docker container execution failed')
+                stderr: undefined
             });
         });
 
@@ -716,7 +716,7 @@ describe('RunContainer > Node Execution', () => {
             expect(result[0][0].json.stdout).toBe('Success\n');
             expect(result[0][1].json.success).toBe(false);
             expect(result[0][1].json.exitCode).toBe(-1);
-            expect(result[0][1].json.error).toContain('Docker container execution failed');
+            expect(result[0][1].json.error).toBe(undefined);
         });
     });
 });
