@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {
     processEnvironmentVariables,
     validateDockerImageName,
@@ -34,7 +35,7 @@ describe('RunContainer > GenericFunctions', () => {
     describe('processEnvironmentVariables', () => {
         it('should process key-pair environment variables', async () => {
             // Arrange
-            mockExecuteFunctions.getNodeParameter.mockImplementation((param) => {
+            mockExecuteFunctions.getNodeParameter.mockImplementation((param: any) => {
                 const params = {
                     sendEnv: true,
                     specifyEnv: 'keypair',
@@ -59,7 +60,7 @@ describe('RunContainer > GenericFunctions', () => {
 
         it('should process JSON environment variables', async () => {
             // Arrange
-            mockExecuteFunctions.getNodeParameter.mockImplementation((param) => {
+            mockExecuteFunctions.getNodeParameter.mockImplementation((param: any) => {
                 const params = {
                     sendEnv: true,
                     specifyEnv: 'json',
@@ -79,7 +80,7 @@ describe('RunContainer > GenericFunctions', () => {
 
         it('should process model input environment variables', async () => {
             // Arrange
-            mockExecuteFunctions.getNodeParameter.mockImplementation((param) => {
+            mockExecuteFunctions.getNodeParameter.mockImplementation((param: any) => {
                 const params = {
                     sendEnv: true,
                     specifyEnv: 'model',

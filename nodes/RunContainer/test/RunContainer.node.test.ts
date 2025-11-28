@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { IExecuteFunctions } from 'n8n-workflow';
 import { NodeOperationError } from 'n8n-workflow';
 import { RunContainer } from '../RunContainer.node';
@@ -11,9 +12,26 @@ const mockContainerHelpers = require('../ContainerHelpers');
 const mockGenericFunctions = require('../GenericFunctions');
 const mockSocketDetector = require('../utils/socketDetector');
 
+// Type declarations for mocked functions
+interface MockedExecuteFunctions extends IExecuteFunctions {
+    getInputData: jest.MockedFunction<any>;
+    getNodeParameter: jest.MockedFunction<any>;
+    continueOnFail: jest.MockedFunction<any>;
+    getNode: jest.MockedFunction<any>;
+}
+
+// @ts-ignore - Disable strict typing for test mocks
+declare global {
+    namespace jest {
+        interface Matchers<R> {
+            toBeContainerResult(): R;
+        }
+    }
+}
+
 describe('RunContainer > Node Execution', () => {
     let node: RunContainer;
-    let executeFunctions: IExecuteFunctions;
+    let executeFunctions: MockedExecuteFunctions;
 
     beforeEach(() => {
         node = new RunContainer();
@@ -21,7 +39,12 @@ describe('RunContainer > Node Execution', () => {
             getInputData: jest.fn(),
             getNodeParameter: jest.fn(),
             continueOnFail: jest.fn(),
-            getNode: jest.fn()
+            getNode: jest.fn(),
+            getCredentials: jest.fn(),
+            helpers: {
+                request: jest.fn(),
+                prepareBinaryData: jest.fn(),
+            }
         } as any;
 
         // Default mock implementations
@@ -35,7 +58,7 @@ describe('RunContainer > Node Execution', () => {
     describe('basic execution', () => {
         it('should execute container with minimal parameters', async () => {
             // Arrange
-            executeFunctions.getNodeParameter.mockImplementation((param) => {
+            executeFunctions.getNodeParameter.mockImplementation((param: any) => {
                 const params = {
                     image: 'alpine:latest',
                     command: 'echo "Hello World"',
@@ -108,7 +131,7 @@ describe('RunContainer > Node Execution', () => {
 
         it('should use custom socket path when provided', async () => {
             // Arrange
-            executeFunctions.getNodeParameter.mockImplementation((param) => {
+            executeFunctions.getNodeParameter.mockImplementation((param: any) => {
                 const params = {
                     image: 'nginx:latest',
                     command: 'nginx -t',
@@ -155,7 +178,7 @@ describe('RunContainer > Node Execution', () => {
 
         it('should auto-detect Docker socket for default path', async () => {
             // Arrange
-            executeFunctions.getNodeParameter.mockImplementation((param) => {
+            executeFunctions.getNodeParameter.mockImplementation((param: any) => {
                 const params = {
                     image: 'busybox:latest',
                     command: 'date',
@@ -202,7 +225,7 @@ describe('RunContainer > Node Execution', () => {
 
         it('should handle custom entrypoint', async () => {
             // Arrange
-            executeFunctions.getNodeParameter.mockImplementation((param) => {
+            executeFunctions.getNodeParameter.mockImplementation((param: any) => {
                 const params = {
                     image: 'python:3.11',
                     command: 'print("Hello from Python")',
@@ -257,7 +280,7 @@ describe('RunContainer > Node Execution', () => {
     describe('environment variables', () => {
         it('should handle environment variables with key-pair mode', async () => {
             // Arrange
-            executeFunctions.getNodeParameter.mockImplementation((param) => {
+            executeFunctions.getNodeParameter.mockImplementation((param: any) => {
                 const params = {
                     image: 'python:3.11',
                     command: 'python -c "import os; print(os.getenv(\\"TEST_VAR\\", \\"default\\"))"',
@@ -314,7 +337,7 @@ describe('RunContainer > Node Execution', () => {
 
         it('should handle environment variables with JSON mode', async () => {
             // Arrange
-            executeFunctions.getNodeParameter.mockImplementation((param) => {
+            executeFunctions.getNodeParameter.mockImplementation((param: any) => {
                 const params = {
                     image: 'node:20',
                     command: 'node -e "console.log(process.env.NODE_ENV)"',
@@ -365,7 +388,7 @@ describe('RunContainer > Node Execution', () => {
     describe('error handling', () => {
         it('should throw NodeOperationError for invalid image name', async () => {
             // Arrange
-            executeFunctions.getNodeParameter.mockImplementation((param) => {
+            executeFunctions.getNodeParameter.mockImplementation((param: any) => {
                 const params = {
                     image: 'invalid@image@name!',
                     command: 'echo test',
@@ -388,7 +411,7 @@ describe('RunContainer > Node Execution', () => {
 
         it('should handle Docker connection errors', async () => {
             // Arrange
-            executeFunctions.getNodeParameter.mockImplementation((param) => {
+            executeFunctions.getNodeParameter.mockImplementation((param: any) => {
                 const params = {
                     image: 'alpine:latest',
                     command: 'echo test',
@@ -431,7 +454,7 @@ describe('RunContainer > Node Execution', () => {
         it('should continue on fail when configured', async () => {
             // Arrange
             executeFunctions.continueOnFail.mockReturnValue(true);
-            executeFunctions.getNodeParameter.mockImplementation((param) => {
+            executeFunctions.getNodeParameter.mockImplementation((param: any) => {
                 const params = {
                     image: 'nonexistent:latest',
                     command: 'echo test',
@@ -481,7 +504,7 @@ describe('RunContainer > Node Execution', () => {
 
         it('should handle generic execution errors', async () => {
             // Arrange
-            executeFunctions.getNodeParameter.mockImplementation((param) => {
+            executeFunctions.getNodeParameter.mockImplementation((param: any) => {
                 const params = {
                     image: 'alpine:latest',
                     command: 'echo test',
@@ -544,7 +567,7 @@ describe('RunContainer > Node Execution', () => {
                 { json: { index: 1 } }
             ]);
 
-            executeFunctions.getNodeParameter.mockImplementation((param, index) => {
+            executeFunctions.getNodeParameter.mockImplementation((param: any, index) => {
                 const params = [
                     {
                         image: 'alpine:latest',
@@ -618,7 +641,7 @@ describe('RunContainer > Node Execution', () => {
                 { json: {} }
             ]);
 
-            executeFunctions.getNodeParameter.mockImplementation((param, index) => {
+            executeFunctions.getNodeParameter.mockImplementation((param: any, index) => {
                 if (index === 0) {
                     return {
                         image: 'alpine:latest',

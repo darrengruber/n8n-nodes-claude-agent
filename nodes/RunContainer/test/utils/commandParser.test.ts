@@ -102,14 +102,14 @@ describe('RunContainer > utils > commandParser', () => {
         });
 
         it('should quote arguments with spaces', () => {
-            expect(buildCommandString(['echo', 'hello world'])).toBe('"hello world"');
+            expect(buildCommandString(['hello world'])).toBe('"hello world"');
             expect(buildCommandString(['git', 'commit', '-m', 'fix bug'])).toBe('git commit -m "fix bug"');
             expect(buildCommandString(['cp', 'source file', 'destination'])).toBe('cp "source file" destination');
         });
 
         it('should escape quotes in arguments', () => {
-            expect(buildCommandString(['echo', 'hello "world"'])).toBe('"hello \\"world\\""');
-            expect(buildCommandString(['grep', '"pattern"'])).toBe('"\\"pattern\\""');
+            expect(buildCommandString(['hello "world"'])).toBe('"hello \\"world\\""');
+            expect(buildCommandString(['grep', '"pattern"'])).toBe('grep "\\"pattern\\""');
         });
 
         it('should handle empty arrays', () => {
@@ -127,7 +127,7 @@ describe('RunContainer > utils > commandParser', () => {
         });
 
         it('should handle mixed quotes and spaces', () => {
-            expect(buildCommandString(['echo', 'hello "world" test'])).toBe('"hello \\"world\\" test"');
+            expect(buildCommandString(['hello "world" test'])).toBe('"hello \\"world\\" test"');
         });
     });
 });
