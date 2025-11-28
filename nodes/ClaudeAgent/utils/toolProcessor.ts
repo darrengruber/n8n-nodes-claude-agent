@@ -14,7 +14,8 @@ export async function processConnectedTools(
     context: IExecuteFunctions | ISupplyDataFunctions,
     itemIndex: number,
     verbose: boolean,
-    logger: DebugLogger
+    logger: DebugLogger,
+    binaryArtifacts?: any[]
 ): Promise<ToolProcessingResult & { toolsCount: number }> {
     logger.logSection('Tool Processing');
     let mcpServers: Record<string, any> = {};
@@ -37,7 +38,7 @@ export async function processConnectedTools(
             }
         }
 
-        const result = await processToolsForAgent(tools, { verbose }, logger);
+        const result = await processToolsForAgent(tools, { verbose }, logger, binaryArtifacts);
         mcpServers = result.mcpServers;
         disallowedTools = result.disallowedTools;
 

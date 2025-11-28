@@ -78,9 +78,12 @@ export async function claudeAgentExecute(
 
             finalPrompt = addOutputParserInstructions(finalPrompt, outputParser, logger);
 
+            // Initialize array to collect binary artifacts from tools
+            const binaryArtifacts: any[] = [];
+
             // Process connected tools
             const { mcpServers, disallowedTools, toolsCount } = await processConnectedTools(
-                this, itemIndex, !!options.verbose, logger
+                this, itemIndex, !!options.verbose, logger, binaryArtifacts
             );
 
             // Process working directory
@@ -132,12 +135,36 @@ export async function claudeAgentExecute(
             // Format final result
             const jsonResult = formatOutputResult(output, !!options.verbose, logs);
 
-            returnData.push({
+            const executionData: INodeExecutionData = {
                 json: jsonResult as ClaudeAgentResultData,
                 pairedItem: {
                     item: itemIndex,
                 },
-            });
+            };
+
+            // Merge collected binary artifacts into execution data
+            if (binaryArtifacts.length > 0) {
+                logger.log(`Merging ${binaryArtifacts.length} binary artifacts into output`);
+                executionData.binary = {};
+
+                for (const artifact of binaryArtifacts) {
+                    // Ensure unique key if multiple files have same name
+                    let key = artifact.fileName;
+                    let counter = 1;
+                    while (executionData.binary[key]) {
+                        key = `${artifact.fileName}_${counter++}`;
+                    }
+
+                    executionData.binary[key] = {
+                        data: artifact.data,
+                        mimeType: artifact.mimeType,
+                        fileName: artifact.fileName,
+                        fileSize: String(artifact.data.length), // Convert to string as per IBinaryData interface
+                    };
+                }
+            }
+
+            returnData.push(executionData);
 
         } catch (error) {
             logger.logError('Execution failed', error);
