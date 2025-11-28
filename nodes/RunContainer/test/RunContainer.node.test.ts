@@ -719,4 +719,397 @@ describe('RunContainer > Node Execution', () => {
             expect(result[0][1].json.error).toBe(undefined);
         });
     });
+
+    describe('binary data support', () => {
+        // Mock binary data helpers
+        let mockPrepareBinaryInput: jest.Mock;
+        let mockCollectBinaryOutput: jest.Mock;
+        let mockCalculateResourceLimits: jest.Mock;
+        let mockCleanupTempDirectory: jest.Mock;
+        let mockCreateOutputDirectory: jest.Mock;
+
+        beforeEach(() => {
+            // Mock the binary data helpers module
+            mockPrepareBinaryInput = jest.fn();
+            mockCollectBinaryOutput = jest.fn();
+            mockCalculateResourceLimits = jest.fn();
+            mockCleanupTempDirectory = jest.fn();
+            mockCreateOutputDirectory = jest.fn();
+
+            jest.mock('../BinaryDataHelpers', () => ({
+                prepareBinaryInput: mockPrepareBinaryInput,
+                collectBinaryOutput: mockCollectBinaryOutput,
+                calculateResourceLimits: mockCalculateResourceLimits,
+                cleanupTempDirectory: mockCleanupTempDirectory,
+                createOutputDirectory: mockCreateOutputDirectory,
+            }));
+        });
+
+        it('should handle binary input files', async () => {
+            // Arrange
+            executeFunctions.getInputData.mockReturnValue([
+                {
+                    json: {},
+                    binary: {
+                        data: {
+                            data: Buffer.from('test image data').toString('base64'),
+                            mimeType: 'image/png',
+                            fileName: 'test.png',
+                        },
+                    },
+                },
+            ]);
+
+            executeFunctions.getNodeParameter.mockImplementation((param: any, index: number) => {
+                const params: any = {
+                    image: 'alpine:latest',
+                    command: 'echo test',
+                    entrypoint: undefined,
+                    sendEnv: false,
+                    socketPath: '/var/run/docker.sock',
+                    binaryDataInput: true,
+                    binaryDataOutput: false,
+                    binaryFileMappings: {
+                        mappings: [{ binaryPropertyName: 'data', containerPath: '/input/test.png' }],
+                    },
+                };
+                return params[param];
+            });
+
+            executeFunctions.helpers = {
+                ...executeFunctions.helpers,
+                assertBinaryData: jest.fn().mockReturnValue({
+                    fileName: 'test.png',
+                    mimeType: 'image/png',
+                }),
+                getBinaryDataBuffer: jest.fn().mockResolvedValue(Buffer.from('test image data')),
+            };
+
+            mockSocketDetector.detectDockerSocket.mockReturnValue({
+                path: '/var/run/docker.sock',
+                exists: true,
+                accessible: true,
+                source: 'default',
+            });
+
+            mockGenericFunctions.validateDockerImageName.mockReturnValue({
+                valid: true,
+                errors: [],
+            });
+
+            mockGenericFunctions.processEnvironmentVariables.mockResolvedValue({
+                variables: [],
+                count: 0,
+                mode: 'keypair',
+            });
+
+            mockContainerHelpers.executeContainer.mockResolvedValue({
+                stdout: 'Container executed with binary input',
+                stderr: '',
+                exitCode: 0,
+                success: true,
+                hasOutput: true,
+            });
+
+            // Act
+            const result = await node.execute.call(executeFunctions);
+
+            // Assert
+            expect(result).toHaveLength(1);
+            expect(result[0][0].json.success).toBe(true);
+            expect(result[0][0].json.container.binaryInput).toBe(true);
+        });
+
+        it('should handle binary output collection', async () => {
+            // Arrange
+            executeFunctions.getNodeParameter.mockImplementation((param: any) => {
+                const params: any = {
+                    image: 'alpine:latest',
+                    command: 'echo "output" > /output/result.txt',
+                    entrypoint: undefined,
+                    sendEnv: false,
+                    socketPath: '/var/run/docker.sock',
+                    binaryDataInput: false,
+                    binaryDataOutput: true,
+                    outputFilePattern: '*.txt',
+                    outputDirectory: '/output',
+                };
+                return params[param];
+            });
+
+            executeFunctions.helpers = {
+                ...executeFunctions.helpers,
+                prepareBinaryData: jest.fn().mockResolvedValue({
+                    data: Buffer.from('output content').toString('base64'),
+                    mimeType: 'text/plain',
+                    fileName: 'result.txt',
+                }),
+            };
+
+            mockSocketDetector.detectDockerSocket.mockReturnValue({
+                path: '/var/run/docker.sock',
+                exists: true,
+                accessible: true,
+                source: 'default',
+            });
+
+            mockGenericFunctions.validateDockerImageName.mockReturnValue({
+                valid: true,
+                errors: [],
+            });
+
+            mockGenericFunctions.processEnvironmentVariables.mockResolvedValue({
+                variables: [],
+                count: 0,
+                mode: 'keypair',
+            });
+
+            mockContainerHelpers.executeContainer.mockResolvedValue({
+                stdout: 'Container created output file',
+                stderr: '',
+                exitCode: 0,
+                success: true,
+                hasOutput: true,
+            });
+
+            // Act
+            const result = await node.execute.call(executeFunctions);
+
+            // Assert
+            expect(result).toHaveLength(1);
+            expect(result[0][0].json.success).toBe(true);
+            expect(result[0][0].json.container.binaryOutput).toBe(true);
+        });
+
+        it('should handle both binary input and output', async () => {
+            // Arrange
+            executeFunctions.getInputData.mockReturnValue([
+                {
+                    json: {},
+                    binary: {
+                        input: {
+                            data: Buffer.from('input data').toString('base64'),
+                            mimeType: 'image/png',
+                            fileName: 'input.png',
+                        },
+                    },
+                },
+            ]);
+
+            executeFunctions.getNodeParameter.mockImplementation((param: any) => {
+                const params: any = {
+                    image: 'alpine:latest',
+                    command: 'cp /input/input.png /output/output.png',
+                    entrypoint: undefined,
+                    sendEnv: false,
+                    socketPath: '/var/run/docker.sock',
+                    binaryDataInput: true,
+                    binaryDataOutput: true,
+                    binaryFileMappings: {
+                        mappings: [{ binaryPropertyName: 'input', containerPath: '/input/input.png' }],
+                    },
+                    outputFilePattern: '*.png',
+                    outputDirectory: '/output',
+                };
+                return params[param];
+            });
+
+            executeFunctions.helpers = {
+                ...executeFunctions.helpers,
+                assertBinaryData: jest.fn().mockReturnValue({
+                    fileName: 'input.png',
+                    mimeType: 'image/png',
+                }),
+                getBinaryDataBuffer: jest.fn().mockResolvedValue(Buffer.from('input data')),
+                prepareBinaryData: jest.fn().mockResolvedValue({
+                    data: Buffer.from('output data').toString('base64'),
+                    mimeType: 'image/png',
+                    fileName: 'output.png',
+                }),
+            };
+
+            mockSocketDetector.detectDockerSocket.mockReturnValue({
+                path: '/var/run/docker.sock',
+                exists: true,
+                accessible: true,
+                source: 'default',
+            });
+
+            mockGenericFunctions.validateDockerImageName.mockReturnValue({
+                valid: true,
+                errors: [],
+            });
+
+            mockGenericFunctions.processEnvironmentVariables.mockResolvedValue({
+                variables: [],
+                count: 0,
+                mode: 'keypair',
+            });
+
+            mockContainerHelpers.executeContainer.mockResolvedValue({
+                stdout: 'File copied',
+                stderr: '',
+                exitCode: 0,
+                success: true,
+                hasOutput: true,
+            });
+
+            // Act
+            const result = await node.execute.call(executeFunctions);
+
+            // Assert
+            expect(result).toHaveLength(1);
+            expect(result[0][0].json.success).toBe(true);
+            expect(result[0][0].json.container.binaryInput).toBe(true);
+            expect(result[0][0].json.container.binaryOutput).toBe(true);
+        });
+
+        it('should pass volume configuration to container', async () => {
+            // Arrange
+            executeFunctions.getInputData.mockReturnValue([
+                {
+                    json: {},
+                    binary: {
+                        file: {
+                            data: Buffer.from('test data').toString('base64'),
+                            mimeType: 'application/octet-stream',
+                            fileName: 'test.bin',
+                        },
+                    },
+                },
+            ]);
+
+            executeFunctions.getNodeParameter.mockImplementation((param: any) => {
+                const params: any = {
+                    image: 'alpine:latest',
+                    command: 'cat /input/test.bin',
+                    entrypoint: undefined,
+                    sendEnv: false,
+                    socketPath: '/var/run/docker.sock',
+                    binaryDataInput: true,
+                    binaryDataOutput: false,
+                    binaryFileMappings: {
+                        mappings: [{ binaryPropertyName: 'file', containerPath: '/input/test.bin' }],
+                    },
+                };
+                return params[param];
+            });
+
+            executeFunctions.helpers = {
+                ...executeFunctions.helpers,
+                assertBinaryData: jest.fn().mockReturnValue({
+                    fileName: 'test.bin',
+                    mimeType: 'application/octet-stream',
+                }),
+                getBinaryDataBuffer: jest.fn().mockResolvedValue(Buffer.from('test data')),
+            };
+
+            mockSocketDetector.detectDockerSocket.mockReturnValue({
+                path: '/var/run/docker.sock',
+                exists: true,
+                accessible: true,
+                source: 'default',
+            });
+
+            mockGenericFunctions.validateDockerImageName.mockReturnValue({
+                valid: true,
+                errors: [],
+            });
+
+            mockGenericFunctions.processEnvironmentVariables.mockResolvedValue({
+                variables: [],
+                count: 0,
+                mode: 'keypair',
+            });
+
+            mockContainerHelpers.executeContainer.mockResolvedValue({
+                stdout: 'test data',
+                stderr: '',
+                exitCode: 0,
+                success: true,
+                hasOutput: true,
+            });
+
+            // Act
+            await node.execute.call(executeFunctions);
+
+            // Assert
+            // Verify executeContainer was called with volume configuration
+            expect(mockContainerHelpers.executeContainer).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    volumes: expect.arrayContaining([expect.stringMatching(/:ro$/)]), // Read-only volume
+                }),
+                expect.any(Function),
+            );
+        });
+
+        it('should handle binary data with no input but output enabled', async () => {
+            // Arrange
+            executeFunctions.getNodeParameter.mockImplementation((param: any) => {
+                const params: any = {
+                    image: 'alpine:latest',
+                    command: 'echo "hello" > /output/greeting.txt',
+                    entrypoint: undefined,
+                    sendEnv: false,
+                    socketPath: '/var/run/docker.sock',
+                    binaryDataInput: false,
+                    binaryDataOutput: true,
+                    outputFilePattern: '*',
+                    outputDirectory: '/output',
+                };
+                return params[param];
+            });
+
+            executeFunctions.helpers = {
+                ...executeFunctions.helpers,
+                prepareBinaryData: jest.fn().mockResolvedValue({
+                    data: Buffer.from('hello\n').toString('base64'),
+                    mimeType: 'text/plain',
+                    fileName: 'greeting.txt',
+                }),
+            };
+
+            mockSocketDetector.detectDockerSocket.mockReturnValue({
+                path: '/var/run/docker.sock',
+                exists: true,
+                accessible: true,
+                source: 'default',
+            });
+
+            mockGenericFunctions.validateDockerImageName.mockReturnValue({
+                valid: true,
+                errors: [],
+            });
+
+            mockGenericFunctions.processEnvironmentVariables.mockResolvedValue({
+                variables: [],
+                count: 0,
+                mode: 'keypair',
+            });
+
+            mockContainerHelpers.executeContainer.mockResolvedValue({
+                stdout: '',
+                stderr: '',
+                exitCode: 0,
+                success: true,
+                hasOutput: false,
+            });
+
+            // Act
+            const result = await node.execute.call(executeFunctions);
+
+            // Assert
+            expect(result).toHaveLength(1);
+            expect(result[0][0].json.success).toBe(true);
+            expect(result[0][0].json.container.binaryInput).toBe(false);
+            expect(result[0][0].json.container.binaryOutput).toBe(true);
+            // Should still create an output directory volume
+            expect(mockContainerHelpers.executeContainer).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    volumes: expect.arrayContaining([expect.stringMatching(/\/output:rw$/)]),
+                }),
+                expect.any(Function),
+            );
+        });
+    });
 });
