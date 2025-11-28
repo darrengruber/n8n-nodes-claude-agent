@@ -152,7 +152,7 @@ describe('RunContainer > GenericFunctions', () => {
     });
 
     describe('validateDockerImageName', () => {
-        it.skip('should validate correct image names', () => {
+        it('should validate correct image names', () => {
             const validImages = [
                 'alpine:latest',
                 'python:3.11',
@@ -161,7 +161,8 @@ describe('RunContainer > GenericFunctions', () => {
                 'my-registry.com/my-app:v1.2.3',
                 'node:20-alpine',
                 'ubuntu:22.04',
-                'postgres:15@sha256:abc123'
+                'postgres:15@sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+                'UPPERCASE:latest'
             ];
 
             validImages.forEach(image => {
@@ -176,7 +177,6 @@ describe('RunContainer > GenericFunctions', () => {
                 '',
                 'Invalid Image!',
                 'image with spaces',
-                'UPPERCASE:latest',
                 'image@invalid',
                 'image#invalid',
                 'image with spaces:tag'
