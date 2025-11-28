@@ -360,18 +360,18 @@ export function parseDockerImageName(imageName: string): {
         result.repository = registryMatch[2];
     }
 
-    // Extract tag
-    const tagMatch = result.repository.match(/^(.+?):([^:@]+)$/);
-    if (tagMatch) {
-        result.repository = tagMatch[1];
-        result.tag = tagMatch[2];
-    }
-
-    // Extract digest (SHA256)
+    // Extract digest (SHA256) - check before tag since @ takes precedence over :
     const digestMatch = result.repository.match(/^(.+?)@sha256:([a-f0-9]+)$/);
     if (digestMatch) {
         result.repository = digestMatch[1];
         result.digest = digestMatch[2];
+    }
+
+    // Extract tag (only if no digest was found)
+    const tagMatch = result.repository.match(/^(.+?):([^:@]+)$/);
+    if (tagMatch) {
+        result.repository = tagMatch[1];
+        result.tag = tagMatch[2];
     }
 
     return result;

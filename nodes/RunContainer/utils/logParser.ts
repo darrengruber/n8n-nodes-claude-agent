@@ -75,7 +75,8 @@ export function parseDockerLogs(logsBuffer: Buffer): ParsedLogEntry[] {
 
         // Extract data
         const data = logsBuffer.slice(dataStart, dataEnd);
-        const text = data.toString('utf8').replace(/[\x00-\x1F\x7F]/g, ''); // Remove all control characters
+        // Remove control characters but preserve essential whitespace (tab, LF, CR)
+        const text = data.toString('utf8').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 
         entries.push({
             stream: streamType as LogStreamType,
@@ -236,17 +237,10 @@ export function sanitizeLogOutput(text: string): string {
         return '';
     }
 
-    // Remove null characters and other control characters
+    // Remove null characters and other control characters but preserve essential whitespace
     return text
         .replace(/\0/g, '') // Remove null bytes
-        .replace(/[\x00-\x1F\x7F]/g, (match) => {
-            // Keep common whitespace characters
-            const code = match.charCodeAt(0);
-            if (code === 9 || code === 10 || code === 13) { // Tab, LF, CR
-                return match;
-            }
-            return ''; // Remove other control characters
-        })
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control chars except tab(9), LF(10), CR(13)
         .replace(/^\s+/, '') // Only trim leading whitespace, preserve trailing
         .replace(/\n$/, ''); // Remove final newline but preserve other trailing whitespace
 }

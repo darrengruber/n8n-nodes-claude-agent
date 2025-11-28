@@ -206,9 +206,9 @@ describe('RunContainer > utils > logParser', () => {
     describe('parseContainerResult', () => {
         it('should parse successful container result', () => {
             const logsBuffer = Buffer.concat([
-                Buffer.from([1, 0, 0, 0, 0, 0, 0, 7]), // stdout: "Success\n"
+                Buffer.from([1, 0, 0, 0, 0, 0, 0, 8]), // stdout: "Success\n" (8 bytes)
                 Buffer.from('Success\n'),
-                Buffer.from([2, 0, 0, 0, 0, 0, 0, 6]), // stderr: "Warning\n"
+                Buffer.from([2, 0, 0, 0, 0, 0, 0, 8]), // stderr: "Warning\n" (8 bytes)
                 Buffer.from('Warning\n')
             ]);
 
@@ -228,7 +228,7 @@ describe('RunContainer > utils > logParser', () => {
 
         it('should handle failed container result', () => {
             const logsBuffer = Buffer.concat([
-                Buffer.from([2, 0, 0, 0, 0, 0, 0, 11]), // stderr: "Error: failed\n"
+                Buffer.from([2, 0, 0, 0, 0, 0, 0, 14]), // stderr: "Error: failed\n" (14 bytes)
                 Buffer.from('Error: failed\n')
             ]);
 
@@ -437,8 +437,8 @@ describe('RunContainer > utils > logParser', () => {
                 totalEntries: 3,
                 stdoutEntries: 2,
                 stderrEntries: 1,
-                stdoutSize: 14, // "Output 1Output 2".length
-                stderrSize: 6, // "Error 1".length
+                stdoutSize: 16, // "Output 1Output 2".length
+                stderrSize: 7, // "Error 1".length
                 executionTime: expect.any(Date),
                 hasMixedStreams: true
             });
