@@ -152,5 +152,94 @@ export const mainProperties: INodeProperties[] = [
             },
         },
     },
+    {
+        displayName: 'Binary Data Input',
+        name: 'binaryDataInput',
+        type: 'boolean',
+        default: false,
+        noDataExpression: true,
+        description: 'Whether to pass binary files from n8n to the container',
+    },
+    {
+        displayName: 'Binary File Mappings',
+        name: 'binaryFileMappings',
+        type: 'fixedCollection',
+        typeOptions: {
+            multipleValues: true,
+        },
+        placeholder: 'Add Binary File',
+        displayOptions: {
+            show: {
+                binaryDataInput: [true],
+            },
+        },
+        default: {
+            mappings: [
+                {
+                    binaryPropertyName: 'data',
+                    containerPath: '/input/file',
+                },
+            ],
+        },
+        options: [
+            {
+                name: 'mappings',
+                displayName: 'File Mappings',
+                values: [
+                    {
+                        displayName: 'Binary Property Name',
+                        name: 'binaryPropertyName',
+                        type: 'string',
+                        default: 'data',
+                        required: true,
+                        description: 'Name of the binary property containing the file to pass to the container',
+                        placeholder: 'data',
+                    },
+                    {
+                        displayName: 'Container Path',
+                        name: 'containerPath',
+                        type: 'string',
+                        default: '/input/file',
+                        required: true,
+                        description: 'Path where the file will be available inside the container',
+                        placeholder: '/input/image.png',
+                    },
+                ],
+            },
+        ],
+    },
+    {
+        displayName: 'Binary Data Output',
+        name: 'binaryDataOutput',
+        type: 'boolean',
+        default: false,
+        noDataExpression: true,
+        description: 'Whether to collect binary output files from the container',
+    },
+    {
+        displayName: 'Output Directory',
+        name: 'outputDirectory',
+        type: 'string',
+        default: '/output',
+        displayOptions: {
+            show: {
+                binaryDataOutput: [true],
+            },
+        },
+        description: 'Directory inside the container where output files will be collected from',
+        placeholder: '/output',
+    },
+    {
+        displayName: 'Output File Pattern',
+        name: 'outputFilePattern',
+        type: 'string',
+        default: '*',
+        displayOptions: {
+            show: {
+                binaryDataOutput: [true],
+            },
+        },
+        description: 'Pattern to filter output files. Use * for all files, or specify patterns like *.pdf, result_*.png (comma-separated)',
+        placeholder: '*.pdf, result_*.png',
+    },
 ];
-

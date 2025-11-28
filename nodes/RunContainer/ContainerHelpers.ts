@@ -20,6 +20,12 @@ export interface ContainerExecutionConfig {
     workingDir?: string;
     autoRemove?: boolean;
     pullPolicy?: 'always' | 'missing' | 'never';
+    volumes?: string[]; // Docker volume mounts (format: "host:container:mode")
+    memory?: number; // Memory limit in bytes
+    cpuQuota?: number; // CPU quota (100000 = 100%)
+    timeout?: number; // Execution timeout in milliseconds
+    readOnlyRootfs?: boolean; // Mount root filesystem as read-only
+    noNewPrivileges?: boolean; // Prevent privilege escalation
 }
 
 /**
@@ -176,7 +182,7 @@ export async function ensureImageAvailable(
  */
 export async function createContainer(
     docker: Docker,
-    config: ContainerExecutionConfig
+    config: ContainerExecutionConfig,
 ): Promise<Docker.Container> {
     // Parse entrypoint and command
     const entrypointArray = config.entrypoint ? parseCommand(config.entrypoint) : undefined;
@@ -190,8 +196,8 @@ export async function createContainer(
         AttachStdout: true,
         AttachStderr: true,
         HostConfig: {
-            AutoRemove: false // Disable auto-remove to prevent 409 log errors
-        }
+            AutoRemove: false, // Disable auto-remove to prevent 409 log errors
+        },
     };
 
     // Set entrypoint if provided
@@ -207,6 +213,30 @@ export async function createContainer(
     // Set working directory if provided
     if (config.workingDir) {
         createOptions.WorkingDir = config.workingDir;
+    }
+
+    // Add volume binds if provided
+    if (config.volumes && config.volumes.length > 0) {
+        createOptions.HostConfig.Binds = config.volumes;
+    }
+
+    // Add resource limits if provided
+    if (config.memory) {
+        createOptions.HostConfig.Memory = config.memory;
+    }
+
+    if (config.cpuQuota) {
+        createOptions.HostConfig.CpuQuota = config.cpuQuota;
+        createOptions.HostConfig.CpuPeriod = 100000; // Standard period
+    }
+
+    // Security options
+    if (config.readOnlyRootfs) {
+        createOptions.HostConfig.ReadonlyRootfs = true;
+    }
+
+    if (config.noNewPrivileges) {
+        createOptions.HostConfig.SecurityOpt = ['no-new-privileges'];
     }
 
     return await docker.createContainer(createOptions);
