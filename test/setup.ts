@@ -3,6 +3,8 @@
  * Global configuration and mocks for all tests
  */
 
+/// <reference path="./types.d.ts" />
+
 // Mock console methods to avoid noise in test output
 const originalConsole = { ...console };
 

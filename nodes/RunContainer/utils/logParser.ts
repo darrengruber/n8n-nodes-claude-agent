@@ -111,14 +111,10 @@ export function separateLogStreams(entries: ParsedLogEntry[]): {
     for (const entry of entries) {
         if (entry.stream === LogStreamType.STDOUT) {
             stdoutChunks.push(entry.data);
-            if (entry.text.trim()) {
-                stdoutLines.push(entry.text);
-            }
+            stdoutLines.push(entry.text);
         } else if (entry.stream === LogStreamType.STDERR) {
             stderrChunks.push(entry.data);
-            if (entry.text.trim()) {
-                stderrLines.push(entry.text);
-            }
+            stderrLines.push(entry.text);
         }
     }
 
@@ -251,7 +247,7 @@ export function sanitizeLogOutput(text: string): string {
             }
             return ''; // Remove other control characters
         })
-        .trim();
+        .replace(/^\s+/, ''); // Only trim leading whitespace, preserve trailing
 }
 
 /**

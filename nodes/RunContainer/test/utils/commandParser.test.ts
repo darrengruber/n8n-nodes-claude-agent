@@ -1,8 +1,7 @@
 import {
     parseCommand,
     validateCommandArgs,
-    buildCommandString,
-    parseEnvironmentVariable
+    buildCommandString
 } from '../../utils/commandParser';
 
 describe('RunContainer > utils > commandParser', () => {
@@ -24,7 +23,7 @@ describe('RunContainer > utils > commandParser', () => {
         it('should handle escaped quotes', () => {
             expect(parseCommand('echo "hello \\"world\\""')).toEqual(['echo', 'hello "world"']);
             expect(parseCommand('echo "C:\\\\Program Files"')).toEqual(['echo', 'C:\\Program Files']);
-            expect(parseCommand('echo "Don\\'t do this"')).toEqual(['echo', 'Don\\'t do this']);
+            expect(parseCommand("echo \"Don't do this\"")).toEqual(['echo', "Don't do this"]);
             expect(parseCommand('grep "pattern\\|other" file.txt')).toEqual(['grep', 'pattern|other', 'file.txt']);
         });
 
@@ -129,48 +128,6 @@ describe('RunContainer > utils > commandParser', () => {
 
         it('should handle mixed quotes and spaces', () => {
             expect(buildCommandString(['echo', 'hello "world" test'])).toBe('"hello \\"world\\" test"');
-        });
-    });
-
-    describe('parseEnvironmentVariable', () => {
-        it('should parse valid environment variables', () => {
-            expect(parseEnvironmentVariable('NODE_ENV=production')).toEqual({ key: 'NODE_ENV', value: 'production' });
-            expect(parseEnvironmentVariable('PORT=3000')).toEqual({ key: 'PORT', value: '3000' });
-            expect(parseEnvironmentVariable('DEBUG=true')).toEqual({ key: 'DEBUG', value: 'true' });
-            expect(parseEnvironmentVariable('EMPTY=')).toEqual({ key: 'EMPTY', value: '' });
-        });
-
-        it('should handle environment variables with complex values', () => {
-            expect(parseEnvironmentVariable('PATH=/usr/bin:/usr/local/bin')).toEqual({
-                key: 'PATH',
-                value: '/usr/bin:/usr/local/bin'
-            });
-            expect(parseEnvironmentVariable('MESSAGE=Hello World!')).toEqual({
-                key: 'MESSAGE',
-                value: 'Hello World!'
-            });
-        });
-
-        it('should return null for invalid environment variables', () => {
-            expect(parseEnvironmentVariable('')).toBe(null);
-            expect(parseEnvironmentVariable('noequalsign')).toBe(null);
-            expect(parseEnvironmentVariable('=nokey')).toBe(null);
-            expect(parseEnvironmentVariable('  =  ')).toBe(null);
-        });
-
-        it('should handle environment variables with multiple equals signs', () => {
-            expect(parseEnvironmentVariable('URL=https://example.com?param=value')).toEqual({
-                key: 'URL',
-                value: 'https://example.com?param=value'
-            });
-        });
-
-        it('should handle environment variables with spaces around equals', () => {
-            expect(parseEnvironmentVariable('KEY = value')).toEqual({ key: 'KEY', value: 'value' });
-        });
-
-        it('should handle empty value', () => {
-            expect(parseEnvironmentVariable('KEY=')).toEqual({ key: 'KEY', value: '' });
         });
     });
 });

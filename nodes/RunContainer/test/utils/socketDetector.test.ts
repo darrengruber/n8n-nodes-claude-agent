@@ -1,3 +1,14 @@
+// Mock fs and os modules
+jest.mock('fs');
+jest.mock('os');
+
+const mockFs = require('fs');
+const mockOs = require('os');
+
+// Set up mocks before importing the module
+mockOs.platform.mockReturnValue('linux');
+mockOs.homedir.mockReturnValue('/home/user');
+
 import {
     detectDockerSocket,
     getAllDockerSockets,
@@ -5,13 +16,6 @@ import {
     DOCKER_SOCKET_PATHS,
     SocketType
 } from '../../utils/socketDetector';
-
-// Mock fs and os modules
-jest.mock('fs');
-jest.mock('os');
-
-const mockFs = require('fs');
-const mockOs = require('os');
 
 describe('RunContainer > utils > socketDetector', () => {
     beforeEach(() => {
@@ -28,8 +32,8 @@ describe('RunContainer > utils > socketDetector', () => {
         it('should use preferred path if provided and accessible', () => {
             // Arrange
             const preferredPath = '/custom/docker.sock';
-            mockFs.existsSync.mockImplementation((path) => path === preferredPath);
-            mockFs.accessSync.mockImplementation((path, mode) => {
+            mockFs.existsSync.mockImplementation((path: string) => path === preferredPath);
+            mockFs.accessSync.mockImplementation((path: string, mode: any) => {
                 if (path === preferredPath) return true;
                 throw new Error('Access denied');
             });
@@ -47,7 +51,7 @@ describe('RunContainer > utils > socketDetector', () => {
         it('should fall back to platform auto-detection for Linux', () => {
             // Arrange
             mockOs.platform.mockReturnValue('linux');
-            mockFs.existsSync.mockImplementation((path) => {
+            mockFs.existsSync.mockImplementation((path: string) => {
                 return path === '/var/run/docker.sock';
             });
             mockFs.accessSync.mockReturnValue(true);
@@ -65,7 +69,7 @@ describe('RunContainer > utils > socketDetector', () => {
         it('should detect Colima socket on macOS', () => {
             // Arrange
             mockOs.platform.mockReturnValue('darwin');
-            mockFs.existsSync.mockImplementation((path) => {
+            mockFs.existsSync.mockImplementation((path: string) => {
                 return path === '/Users/user/.colima/default/docker.sock';
             });
             mockFs.accessSync.mockReturnValue(true);
@@ -113,10 +117,10 @@ describe('RunContainer > utils > socketDetector', () => {
         it('should handle socket access errors gracefully', () => {
             // Arrange
             mockOs.platform.mockReturnValue('linux');
-            mockFs.existsSync.mockImplementation((path) => {
+            mockFs.existsSync.mockImplementation((path: string) => {
                 return path === '/var/run/docker.sock';
             });
-            mockFs.accessSync.mockImplementation((path, mode) => {
+            mockFs.accessSync.mockImplementation((path: string, mode: any) => {
                 throw new Error('Permission denied');
             });
 
@@ -135,10 +139,10 @@ describe('RunContainer > utils > socketDetector', () => {
         it('should return all detected sockets sorted by accessibility', () => {
             // Arrange
             mockOs.platform.mockReturnValue('linux');
-            mockFs.existsSync.mockImplementation((path) => {
+            mockFs.existsSync.mockImplementation((path: string) => {
                 return path === '/var/run/docker.sock' || path === '/run/docker.sock';
             });
-            mockFs.accessSync.mockImplementation((path, mode) => {
+            mockFs.accessSync.mockImplementation((path: string, mode: any) => {
                 return path === '/run/docker.sock'; // Only this one is accessible
             });
 
@@ -162,10 +166,10 @@ describe('RunContainer > utils > socketDetector', () => {
         it('should handle macOS socket detection', () => {
             // Arrange
             mockOs.platform.mockReturnValue('darwin');
-            mockFs.existsSync.mockImplementation((path) => {
+            mockFs.existsSync.mockImplementation((path: string) => {
                 return path.includes('docker.sock');
             });
-            mockFs.accessSync.mockImplementation((path, mode) => {
+            mockFs.accessSync.mockImplementation((path: string, mode: any) => {
                 return path.includes('colima');
             });
 
@@ -217,7 +221,7 @@ describe('RunContainer > utils > socketDetector', () => {
         it('should include detected sockets in environment info', () => {
             // Arrange
             mockOs.platform.mockReturnValue('linux');
-            mockFs.existsSync.mockImplementation((path) => path === '/var/run/docker.sock');
+            mockFs.existsSync.mockImplementation((path: string) => path === '/var/run/docker.sock');
             mockFs.accessSync.mockReturnValue(true);
 
             // Act
@@ -294,10 +298,10 @@ describe('RunContainer > utils > socketDetector', () => {
         it('should handle permission denied errors gracefully', () => {
             // Arrange
             mockOs.platform.mockReturnValue('linux');
-            mockFs.existsSync.mockImplementation((path) => {
+            mockFs.existsSync.mockImplementation((path: string) => {
                 return path === '/var/run/docker.sock';
             });
-            mockFs.accessSync.mockImplementation((path, mode) => {
+            mockFs.accessSync.mockImplementation((path: string, mode: any) => {
                 const error = new Error('Permission denied') as any;
                 error.code = 'EACCES';
                 throw error;
