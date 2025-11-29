@@ -310,7 +310,7 @@ export async function adaptToMcpTools(
             // Build workspace instructions with default paths
             // Note: If users change workspaceMountPath, binaryInputPath, or outputDirectory,
             // they should update the tool description accordingly
-            const workspaceInstructions = '\n\nIMPORTANT: This container has a persistent workspace volume mounted at /agent/workspace. Any files you create in /agent/workspace/output will be automatically collected and returned as binary data.';
+            const workspaceInstructions = '\n\nWorkspace: A persistent volume is mounted at /agent/workspace. Use this directory to persist files between turns.';
             enhancedDescription += workspaceInstructions;
 
             // Check for binary data and list input files
@@ -326,20 +326,11 @@ export async function adaptToMcpTools(
                 }
             } else {
                 // No binary data, just mention where inputs would be
-                enhancedDescription += '\n\nInput Files: If binary input is enabled, input files will be available in /agent/workspace/input.';
+                enhancedDescription += '\n\nIf binary input is enabled, input files will be available in /agent/workspace/input.';
             }
 
-            // Add explicit output instructions with examples
-            enhancedDescription += `\n\nCRITICAL FOR BINARY OUTPUT:
-• ALWAYS use /agent/workspace/output for files you want to return
-• NEVER use /output, /tmp, or other directories for output files
-• Examples: echo "data" > /agent/workspace/output/result.txt, dd if=/dev/zero of=/agent/workspace/output/file.bin bs=1024 count=1
-• The system will automatically collect files from /agent/workspace/output and return them as binary data
-
-File paths to use:
-• Workspace root: /agent/workspace/
-• Input files: /agent/workspace/input/
-• Output files: /agent/workspace/output/ ← USE THIS FOR BINARY OUTPUT`;
+            // Add output instructions
+            enhancedDescription += '\n\nOutput Files: Place any files you want to return in /agent/workspace/output.';
         }
 
 
@@ -383,9 +374,6 @@ File paths to use:
 
                 const result = await method(input);
 
-                console.log(`[MCPAdapter] Tool ${t.name} result type:`, typeof result);
-                console.log(`[MCPAdapter] Tool ${t.name} result:`, result);
-
                 if (verbose && logger) {
                     logger.log(`Tool ${t.name} result:`, result);
                 }
@@ -394,55 +382,60 @@ File paths to use:
                 let outputText = '';
                 if (typeof result === 'string') {
                     outputText = result;
-                } else if (Array.isArray(result) && result.length > 0 && result[0].json) {
-                    // It's likely INodeExecutionData[]
-                    const items = result; // Flattened array from n8n execution
-                    const jsonOutputs: any[] = [];
+                } else if (Array.isArray(result) && result.length > 0) {
+                    // Handle INodeExecutionData[][] (standard n8n node output) or INodeExecutionData[]
+                    let items: any[] = [];
 
-                    console.log(`[MCPAdapter] Processing ${items.length} items from tool result`);
-                    console.log(`[MCPAdapter] First item keys:`, Object.keys(items[0]));
-                    console.log(`[MCPAdapter] First item has binary:`, !!items[0].binary);
-                    if (items[0].binary) {
-                        console.log(`[MCPAdapter] Binary keys:`, Object.keys(items[0].binary));
+                    if (Array.isArray(result[0])) {
+                        // It's INodeExecutionData[][]
+                        items = result.flat();
+                    } else if (result[0].json) {
+                        // It's INodeExecutionData[]
+                        items = result;
                     }
 
-                    for (const item of items) {
-                        if (item.json) {
-                            jsonOutputs.push(item.json);
-                        }
+                    if (items.length > 0 && items[0].json) {
+                        const jsonOutputs: any[] = [];
 
-                        // Check for binary data
-                        if (item.binary && binaryArtifacts) {
-                            console.log(`[MCPAdapter] Found binary data in item, processing...`);
-                            for (const [key, binaryData] of Object.entries(item.binary)) {
-                                if (binaryData && (binaryData as any).data) {
-                                    const fileName = (binaryData as any).fileName || key;
-                                    const mimeType = (binaryData as any).mimeType || 'application/octet-stream';
+                        for (const item of items) {
+                            if (item.json) {
+                                jsonOutputs.push(item.json);
+                            }
 
-                                    logger?.log(`Found binary artifact: ${fileName} (${mimeType})`);
+                            // Check for binary data
+                            if (item.binary && binaryArtifacts) {
+                                for (const [key, binaryData] of Object.entries(item.binary)) {
+                                    if (binaryData && (binaryData as any).data) {
+                                        const fileName = (binaryData as any).fileName || key;
+                                        const mimeType = (binaryData as any).mimeType || 'application/octet-stream';
 
-                                    binaryArtifacts.push({
-                                        toolName: t.name,
-                                        fileName,
-                                        mimeType,
-                                        data: (binaryData as any).data,
-                                        description: `Generated by tool ${t.name}`
-                                    });
+                                        logger?.log(`Found binary artifact: ${fileName} (${mimeType})`);
 
-                                    // Add reference to output text
-                                    jsonOutputs.push({
-                                        _binaryFile: {
+                                        binaryArtifacts.push({
+                                            toolName: t.name,
                                             fileName,
                                             mimeType,
-                                            message: `Binary file '${fileName}' has been generated and saved.`
-                                        }
-                                    });
+                                            data: (binaryData as any).data,
+                                            description: `Generated by tool ${t.name}`
+                                        });
+
+                                        // Add reference to output text
+                                        jsonOutputs.push({
+                                            _binaryFile: {
+                                                fileName,
+                                                mimeType,
+                                                message: `Binary file '${fileName}' has been generated and saved.`
+                                            }
+                                        });
+                                    }
                                 }
                             }
                         }
+                        outputText = JSON.stringify(jsonOutputs);
+                    } else {
+                        // Fallback for other array types
+                        outputText = JSON.stringify(result);
                     }
-
-                    outputText = JSON.stringify(jsonOutputs);
                 } else {
                     outputText = JSON.stringify(result);
                 }

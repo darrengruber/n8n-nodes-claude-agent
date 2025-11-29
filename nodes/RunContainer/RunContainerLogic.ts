@@ -14,7 +14,8 @@ import {
     initializeDockerClient,
     ensureVolume,
     getWorkspaceVolumeName,
-    setWorkspaceVolumeSession
+    setWorkspaceVolumeSession,
+    copyFilesFromVolume
 } from './ContainerHelpers';
 import { detectDockerSocket } from './utils/socketDetector';
 import {
@@ -107,17 +108,14 @@ export async function executeContainerWithBinary(
             }
         } else if (params.binaryDataOutput) {
             // Binary output without input - create temp dir for extraction later
-            console.log(`[BinaryOutput] Creating temp directory for binary collection...`);
             const fs = await import('fs/promises');
             const path = await import('path');
             const os = await import('os');
             tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'n8n-docker-output-'));
             tempDirectories.push(tempDir);
-            console.log(`[BinaryOutput] Created temp directory: ${tempDir}`);
 
             // We don't mount this temp dir anymore for output, we use it for extraction
             await createOutputDirectory(tempDir);
-            console.log(`[BinaryOutput] Output directory created in temp dir`);
         }
 
         // Execute container
@@ -144,6 +142,12 @@ export async function executeContainerWithBinary(
                     socketPath,
                     binaryInput: params.binaryDataInput,
                     binaryOutput: params.binaryDataOutput,
+                    // Add debug info immediately to see if code path is hit
+                    binaryOutputDebug: {
+                        binaryDataOutput: params.binaryDataOutput,
+                        tempDir: tempDir || null,
+                        willAttemptCollection: !!(params.binaryDataOutput && tempDir),
+                    },
                 },
             },
             pairedItem: {
@@ -152,87 +156,152 @@ export async function executeContainerWithBinary(
         };
 
         // Collect binary output if enabled
-        console.log(`[BinaryCollectionCheck] binaryDataOutput: ${params.binaryDataOutput}, tempDir: ${!!tempDir}`);
         if (params.binaryDataOutput && tempDir) {
-            console.log(`[BinaryOutput] Starting binary collection process...`);
-            // We need to copy files from the container to the temp dir
-            // The container is still alive (autoRemove: false)
-            // We copy from workspaceMountPath (or root?)
-            // If the user specified a pattern like "*.png", we need to find those files.
-            // Our copyFilesFromContainer uses 'docker cp' which takes a path.
-            // If we want to support patterns, we might need to be smarter.
-            // For now, let's assume we copy the entire workspace content or specific files?
-            // The user said "extract the binary data".
-
-            // Let's try to copy from workspaceMountPath.
-            // But we need to put it in tempDir/output for collectBinaryOutput to work.
+            // Copy files from the workspace volume to temp directory
+            // The workspace volume persists, so we can extract files even after the container is removed
             const outputDir = `${tempDir}/output`;
+            
+            // Ensure output directory exists
+            const fs = await import('fs/promises');
+            await fs.mkdir(outputDir, { recursive: true });
 
-            // We use the container instance from the result? 
-            // Wait, executeContainer returns result but cleans up container if we are not careful.
-            // In executeContainer, we have:
-            // finally { await container.remove() }
-            // So the container is GONE by now.
+            // Determine source path inside the volume
+            // copyFilesFromVolume can handle both absolute paths (starting with /) and relative paths
+            let sourcePath: string;
+            if (params.outputDirectory) {
+                if (params.outputDirectory.startsWith('/')) {
+                    // Absolute path - use as-is (copyFilesFromVolume will handle it)
+                    sourcePath = params.outputDirectory;
+                } else {
+                    // Relative path - use as-is (will be resolved relative to volumeMountPath)
+                    sourcePath = params.outputDirectory;
+                }
+            } else {
+                // Default: output directory inside workspace (relative to workspaceMountPath)
+                sourcePath = 'output';
+            }
 
-            // We need to modify executeContainer to NOT remove the container if we need to extract files?
-            // Or we extract files inside executeContainer?
-            // executeContainer is in ContainerHelpers.ts.
-
-            // Actually, we can't extract here if the container is gone.
-            // We need to change the architecture slightly.
-            // But wait, the workspace volume PERSISTS.
-            // So we can extract from the volume!
-            // But we can't easily extract from a volume without a container.
-
-            // So we should probably mount a helper container to extract?
-            // Or, we can modify executeContainer to allow a callback before removal?
-            // Or we can just use the volume.
-
-            // If we use the volume, we can mount it to a temporary helper container and copy files out.
-            // That seems robust.
-
-            // Helper container to extract files from workspace volume
-            // The sourcePath should be the output directory relative to the workspace mount point
-            const sourcePath = params.outputDirectory || `${params.workspaceMountPath}/output`;
-
-            // More robust file copy command that handles:
-            // - Empty directories (won't fail if no files exist)
-            // - Files with special characters
-            // - Proper error handling
-            const copyCommand = `sh -c "
-                echo 'Extracting files from ${sourcePath}...'
-                if [ -d '${sourcePath}' ]; then
-                    find '${sourcePath}' -type f -exec cp {} /output/ \\; 2>/dev/null || true
-                    echo 'Files copied successfully'
-                else
-                    echo 'Output directory does not exist, no files to extract'
-                fi
-            "`;
-
-            const helperConfig: ContainerExecutionConfig = {
-                image: 'alpine:latest',
-                command: copyCommand,
-                volumes: [
-                    `${volumeName}:${params.workspaceMountPath}:ro`,
-                    `${outputDir}:/output:rw`
-                ],
-                autoRemove: true
+            // Add debug info to execution result
+            (executionData.json.container as any).binaryOutputDebug = {
+                volumeName,
+                sourcePath,
+                workspaceMountPath: params.workspaceMountPath,
+                outputDir,
+                tempDir,
             };
 
-            await executeContainer(helperConfig);
+            try {
+                // Use dockerode to copy files from volume (equivalent to docker cp)
+                // sourcePath will be resolved relative to volumeMountPath in the container
+                console.log(`[BinaryOutput] Copying files from volume: ${volumeName}, sourcePath: ${sourcePath}, workspaceMountPath: ${params.workspaceMountPath}, outputDir: ${outputDir}`);
+                const copyDebugInfo = await copyFilesFromVolume(
+                    docker,
+                    volumeName,
+                    params.workspaceMountPath,
+                    sourcePath,
+                    outputDir,
+                    socketPath
+                );
+                console.log(`[BinaryOutput] Successfully copied files from volume to ${outputDir}`);
+                (executionData.json.container as any).binaryOutputDebug.copySuccess = true;
+                // Add tar and extraction debug info
+                if (copyDebugInfo.tarContents) {
+                    (executionData.json.container as any).binaryOutputDebug.tarContents = copyDebugInfo.tarContents;
+                }
+                if (copyDebugInfo.extractedFiles) {
+                    (executionData.json.container as any).binaryOutputDebug.extractedFilesFromTar = copyDebugInfo.extractedFiles;
+                }
+                if (copyDebugInfo.tarFileSize !== undefined) {
+                    (executionData.json.container as any).binaryOutputDebug.tarFileSize = copyDebugInfo.tarFileSize;
+                }
+            } catch (error: any) {
+                // If copy fails, it might be because the directory doesn't exist or is empty
+                // This is not necessarily an error - container may not produce output files
+                console.warn(`[BinaryOutput] Failed to copy files from volume: ${error.message}`);
+                (executionData.json.container as any).binaryOutputDebug.copyError = error.message;
+                (executionData.json.container as any).binaryOutputDebug.copySuccess = false;
+                // Don't throw - allow collectBinaryOutput to check if files exist anyway
+            }
 
-            // Now files are in outputDir, collect them
-            console.log(`[BinaryOutput] Collecting files from ${outputDir} with pattern: ${params.outputFilePattern}`);
+            // Collect binary output files
+            console.log(`[BinaryOutput] Collecting binary output from ${outputDir} with pattern: ${params.outputFilePattern}`);
+            
+            // List files in output directory for debugging (recursively)
+            let filesInOutputDir: string[] = [];
+            try {
+                const path = await import('path');
+                
+                // First try direct listing
+                filesInOutputDir = await fs.readdir(outputDir);
+                console.log(`[BinaryOutput] Files found in output directory (direct):`, filesInOutputDir);
+                
+                // If no files found, check recursively for subdirectories
+                if (filesInOutputDir.length === 0) {
+                    async function findFilesRecursive(dir: string, baseDir: string = dir): Promise<string[]> {
+                        const files: string[] = [];
+                        const entries = await fs.readdir(dir, { withFileTypes: true });
+                        
+                        for (const entry of entries) {
+                            const fullPath = path.join(dir, entry.name);
+                            const relativePath = path.relative(baseDir, fullPath);
+                            
+                            if (entry.isDirectory()) {
+                                const subFiles = await findFilesRecursive(fullPath, baseDir);
+                                files.push(...subFiles);
+                            } else if (entry.isFile()) {
+                                files.push(relativePath);
+                            }
+                        }
+                        
+                        return files;
+                    }
+                    
+                    const recursiveFiles = await findFilesRecursive(outputDir);
+                    console.log(`[BinaryOutput] Files found recursively:`, recursiveFiles);
+                    filesInOutputDir = recursiveFiles;
+                    
+                    // If files are in subdirectories, move them to the root output directory
+                    if (recursiveFiles.length > 0) {
+                        console.log(`[BinaryOutput] Moving files from subdirectories to output root`);
+                        for (const file of recursiveFiles) {
+                            const sourcePath = path.join(outputDir, file);
+                            const fileName = path.basename(file);
+                            const targetPath = path.join(outputDir, fileName);
+                            
+                            // Only move if it's not already at the root
+                            if (sourcePath !== targetPath) {
+                                await fs.copyFile(sourcePath, targetPath);
+                                console.log(`[BinaryOutput] Moved ${file} to ${fileName}`);
+                            }
+                        }
+                    }
+                }
+                
+                (executionData.json.container as any).binaryOutputDebug.filesInOutputDir = filesInOutputDir;
+            } catch (error: any) {
+                console.warn(`[BinaryOutput] Could not list files in output directory: ${error.message}`);
+                (executionData.json.container as any).binaryOutputDebug.listError = error.message;
+            }
+
             const outputBinary = await collectBinaryOutput(context, tempDir, params.outputFilePattern);
+            console.log(`[BinaryOutput] Collected ${Object.keys(outputBinary).length} binary files:`, Object.keys(outputBinary));
+            (executionData.json.container as any).binaryOutputDebug.collectedFilesCount = Object.keys(outputBinary).length;
+            (executionData.json.container as any).binaryOutputDebug.collectedFileNames = Object.keys(outputBinary);
 
-            console.log(`[BinaryOutput] Found ${Object.keys(outputBinary).length} files:`, Object.keys(outputBinary));
             if (Object.keys(outputBinary).length > 0) {
                 executionData.binary = outputBinary;
                 (executionData.json.container as any).outputFilesCount = Object.keys(outputBinary).length;
-                console.log(`[BinaryOutput] Successfully collected ${Object.keys(outputBinary).length} binary files`);
+                console.log(`[BinaryOutput] Binary data attached to execution result`);
             } else {
-                console.log(`[BinaryOutput] No binary files found to collect`);
+                console.warn(`[BinaryOutput] No binary files collected - check if files exist in ${outputDir}`);
             }
+        } else {
+            // Debug: log why binary collection didn't run
+            (executionData.json.container as any).binaryOutputDebug = {
+                binaryDataOutput: params.binaryDataOutput,
+                tempDir: tempDir || null,
+                reason: !params.binaryDataOutput ? 'binaryDataOutput is false' : !tempDir ? 'tempDir is null' : 'unknown'
+            };
         }
 
         return executionData;
