@@ -310,7 +310,7 @@ export async function adaptToMcpTools(
             // Build workspace instructions with default paths
             // Note: If users change workspaceMountPath, binaryInputPath, or outputDirectory,
             // they should update the tool description accordingly
-            const workspaceInstructions = '\n\nWorkspace: A persistent volume is mounted at /agent/workspace. Use this directory to persist files between turns.';
+            const workspaceInstructions = '\n\nIMPORTANT: This container has a persistent workspace volume mounted at /agent/workspace. Any files you create in /agent/workspace/output will be automatically collected and returned as binary data.';
             enhancedDescription += workspaceInstructions;
 
             // Check for binary data and list input files
@@ -326,11 +326,20 @@ export async function adaptToMcpTools(
                 }
             } else {
                 // No binary data, just mention where inputs would be
-                enhancedDescription += '\n\nIf binary input is enabled, input files will be available in /agent/workspace/input.';
+                enhancedDescription += '\n\nInput Files: If binary input is enabled, input files will be available in /agent/workspace/input.';
             }
 
-            // Add output instructions
-            enhancedDescription += '\n\nOutput Files: Place any files you want to return in /agent/workspace/output.';
+            // Add explicit output instructions with examples
+            enhancedDescription += `\n\nCRITICAL FOR BINARY OUTPUT:
+• ALWAYS use /agent/workspace/output for files you want to return
+• NEVER use /output, /tmp, or other directories for output files
+• Examples: echo "data" > /agent/workspace/output/result.txt, dd if=/dev/zero of=/agent/workspace/output/file.bin bs=1024 count=1
+• The system will automatically collect files from /agent/workspace/output and return them as binary data
+
+File paths to use:
+• Workspace root: /agent/workspace/
+• Input files: /agent/workspace/input/
+• Output files: /agent/workspace/output/ ← USE THIS FOR BINARY OUTPUT`;
         }
 
 

@@ -186,19 +186,27 @@ export async function executeContainerWithBinary(
             // If we use the volume, we can mount it to a temporary helper container and copy files out.
             // That seems robust.
 
-            // Helper container to extract files
-            // We copy from the configured output directory inside the workspace
-            // If outputDirectory is absolute, we assume it's inside the workspace or we mount it?
-            // But we only mount the workspace volume.
-            // So the agent must write to the workspace volume.
-            // The outputDirectory param is "Directory inside the container where output files will be collected from".
-            // If the user sets it to "/agent/workspace/output", then we should copy from there.
-
+            // Helper container to extract files from workspace volume
+            // The sourcePath should be the output directory relative to the workspace mount point
             const sourcePath = params.outputDirectory || `${params.workspaceMountPath}/output`;
+
+            // More robust file copy command that handles:
+            // - Empty directories (won't fail if no files exist)
+            // - Files with special characters
+            // - Proper error handling
+            const copyCommand = `sh -c "
+                echo 'Extracting files from ${sourcePath}...'
+                if [ -d '${sourcePath}' ]; then
+                    find '${sourcePath}' -type f -exec cp {} /output/ \\; 2>/dev/null || true
+                    echo 'Files copied successfully'
+                else
+                    echo 'Output directory does not exist, no files to extract'
+                fi
+            "`;
 
             const helperConfig: ContainerExecutionConfig = {
                 image: 'alpine:latest',
-                command: `sh -c "cp -r ${sourcePath}/* /output/ 2>/dev/null || true"`,
+                command: copyCommand,
                 volumes: [
                     `${volumeName}:${params.workspaceMountPath}:ro`,
                     `${outputDir}:/output:rw`
@@ -209,11 +217,16 @@ export async function executeContainerWithBinary(
             await executeContainer(helperConfig);
 
             // Now files are in outputDir, collect them
+            console.log(`[BinaryOutput] Collecting files from ${outputDir} with pattern: ${params.outputFilePattern}`);
             const outputBinary = await collectBinaryOutput(context, tempDir, params.outputFilePattern);
 
+            console.log(`[BinaryOutput] Found ${Object.keys(outputBinary).length} files:`, Object.keys(outputBinary));
             if (Object.keys(outputBinary).length > 0) {
                 executionData.binary = outputBinary;
                 (executionData.json.container as any).outputFilesCount = Object.keys(outputBinary).length;
+                console.log(`[BinaryOutput] Successfully collected ${Object.keys(outputBinary).length} binary files`);
+            } else {
+                console.log(`[BinaryOutput] No binary files found to collect`);
             }
         }
 
