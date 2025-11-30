@@ -80,6 +80,7 @@ export class RunContainerTool implements INodeType {
 
                 // Get container parameters from tool args or node parameters
                 const image = toolArgs.image || this.getNodeParameter('image', itemIndex) as string;
+                const executionMode = toolArgs.executionMode || this.getNodeParameter('executionMode', itemIndex, 'simple') as string;
                 const entrypoint = toolArgs.entrypoint || this.getNodeParameter('entrypoint', itemIndex, '') as string;
                 const command = toolArgs.command || this.getNodeParameter('command', itemIndex, '') as string;
 
@@ -176,6 +177,7 @@ export class RunContainerTool implements INodeType {
                     command,
                     socketPath,
                     envVars,
+                    executionMode,
                     binaryDataInput,
                     binaryDataOutput,
                     binaryFileMappings,

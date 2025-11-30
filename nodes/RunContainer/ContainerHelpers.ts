@@ -15,6 +15,7 @@ export interface ContainerExecutionConfig {
     image: string;
     entrypoint?: string;
     command?: string;
+    executionMode?: string;
     environmentVariables?: string[];
     socketPath?: string;
     workingDir?: string;
@@ -151,7 +152,7 @@ export async function ensureImageAvailable(
 ): Promise<void> {
     switch (pullPolicy) {
         case 'never':
-            // Don't pull, just check if exists
+            // Don//t pull, just check if exists
             const exists = await checkImageExists(docker, imageName);
             if (!exists) {
                 throw new Error(`Image ${imageName} not found and pull policy is 'never'`);
@@ -185,7 +186,7 @@ export async function ensureImageAvailable(
  * @param cmd - Command string to check
  * @returns True if command needs shell interpretation
  */
-function needsShellInterpretation(cmd: string): boolean {
+export function needsShellInterpretation(cmd: string): boolean {
     if (!cmd) return false;
     // Check for common shell operators that need interpretation
     const shellOperators = ['>', '>>', '<', '|', '&&', '||', ';', '`', '$('];
@@ -200,8 +201,13 @@ export async function createContainer(
     let entrypointArray = config.entrypoint ? parseCommand(config.entrypoint) : undefined;
     let commandArray = config.command ? parseCommand(config.command) : [];
 
-    // If command needs shell interpretation and no entrypoint is set, wrap in sh -c
-    if (config.command && needsShellInterpretation(config.command) && !config.entrypoint) {
+    // Handle simple mode: always use bash -c for the command
+    if (config.executionMode === 'simple' && config.command) {
+        entrypointArray = ['bash'];
+        commandArray = ['-c', config.command];
+    }
+    // Handle advanced mode: use original logic for shell interpretation
+    else if (config.command && needsShellInterpretation(config.command) && !config.entrypoint) {
         // Wrap the entire command in sh -c
         entrypointArray = ['/bin/sh'];
         commandArray = ['-c', config.command];
@@ -289,7 +295,7 @@ export async function getContainerLogs(container: Docker.Container): Promise<Buf
         const logsBuffer = await container.logs({
             stdout: true,
             stderr: true,
-            timestamps: false // Don't include timestamps to match original behavior
+            timestamps: false // Don//t include timestamps to match original behavior
         });
 
         // dockerode v3+ returns a buffer directly in some cases

@@ -28,8 +28,9 @@ import {
 
 export interface RunContainerParams {
     image: string;
-    entrypoint: string;
-    command: string;
+    entrypoint?: string;
+    command?: string;
+    executionMode: string;
     socketPath: string;
     envVars: string[];
     binaryDataInput: boolean;
@@ -64,11 +65,25 @@ export async function executeContainerWithBinary(
             );
         }
 
-        // Build container configuration
+        // Build container configuration based on execution mode
+        let entrypoint: string | undefined;
+        let command: string | undefined;
+        
+        if (params.executionMode === 'simple') {
+            // Simple mode: use bash as entrypoint, command as argument to -c
+            entrypoint = 'bash';
+            command = params.command || '';
+        } else {
+            // Advanced mode: use provided entrypoint and command directly
+            entrypoint = params.entrypoint || undefined;
+            command = params.command || undefined;
+        }
+        
         const containerConfig: ContainerExecutionConfig = {
             image: params.image,
-            entrypoint: params.entrypoint || undefined,
-            command: params.command || undefined,
+            entrypoint,
+            command,
+            executionMode: params.executionMode,
             environmentVariables: params.envVars,
             socketPath,
             autoRemove: true,

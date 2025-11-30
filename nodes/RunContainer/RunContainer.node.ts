@@ -37,6 +37,7 @@ export class RunContainer implements INodeType {
 
                 // Get container parameters
                 const image = this.getNodeParameter('image', itemIndex) as string;
+                const executionMode = this.getNodeParameter('executionMode', itemIndex, 'simple') as string;
                 const entrypoint = this.getNodeParameter('entrypoint', itemIndex, '') as string;
                 const command = this.getNodeParameter('command', itemIndex, '') as string;
 
@@ -67,6 +68,7 @@ export class RunContainer implements INodeType {
                     image,
                     entrypoint,
                     command,
+                    executionMode,
                     socketPath,
                     envVars: envResult.variables,
                     binaryDataInput,
