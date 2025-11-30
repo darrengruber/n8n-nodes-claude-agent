@@ -185,7 +185,31 @@ export class RunContainerTool implements INodeType {
                     outputDirectory,
                 });
 
-                returnData.push(result);
+                // Debug: Log the structure of the result being returned
+                console.log('[RunContainerTool] Result structure:', {
+                    hasBinary: !!result.binary,
+                    hasJson: !!result.json,
+                    binaryKeys: result.binary ? Object.keys(result.binary) : [],
+                    jsonKeys: result.json ? Object.keys(result.json) : [],
+                    fullStructure: JSON.stringify(result, null, 2)
+                });
+
+                // For AI tool execution, we need to manually include binary data in the JSON
+                // because n8n serializes tool results to JSON, losing binary data
+                if (result.binary && Object.keys(result.binary).length > 0) {
+                    const resultWithBinary = {
+                        ...result.json,
+                        binary: result.binary
+                    };
+                    console.log('[RunContainerTool] Including binary data in JSON result:', {
+                        binaryKeys: Object.keys(result.binary)
+                    });
+                    returnData.push({
+                        json: resultWithBinary
+                    });
+                } else {
+                    returnData.push(result);
+                }
 
             } catch (error) {
                 if (this.continueOnFail()) {
