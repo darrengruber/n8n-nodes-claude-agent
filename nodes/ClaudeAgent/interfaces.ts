@@ -3,6 +3,9 @@ export interface ClaudeAgentOptions {
     maxTurns?: number;
     verbose?: boolean;
     workingDirectory?: string;
+    binaryInputMode?: 'disabled' | 'auto' | 'manual';
+    maxBinaryFileSize?: number;
+    allowedBinaryTypes?: string[];
 }
 
 export interface ClaudeAgentConfiguration {
@@ -67,4 +70,30 @@ export interface EnvironmentVariablesResult {
     variables: string[];
     count: number;
     mode?: 'keypair' | 'json' | 'model';
+}
+
+export interface BinaryInputMetadata {
+    originalKey: string;
+    fileName: string;
+    mimeType: string;
+    fileSize: number;
+    filePath?: string; // Path when mounted for tools
+    fileType?: 'image' | 'document' | 'data' | 'archive' | 'code' | 'other';
+}
+
+export interface BinaryInputProcessingResult {
+    metadata: BinaryInputMetadata[];
+    totalSize: number;
+    skippedFiles: Array<{
+        key: string;
+        reason: string;
+        fileName?: string;
+    }>;
+    tempDirectory?: string; // For auto mode
+}
+
+export interface FileTypeInfo {
+    extensions: string[];
+    mimeTypes: string[];
+    category: 'image' | 'document' | 'data' | 'archive' | 'code' | 'other';
 }

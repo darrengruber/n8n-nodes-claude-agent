@@ -145,6 +145,90 @@ export const mainProperties: INodeProperties[] = [
                 placeholder: '/path/to/project or leave empty for current directory',
                 description: 'The starting directory for the agent (optional, defaults to current directory)',
             },
+            {
+                displayName: 'Binary Input Handling',
+                name: 'binaryInputMode',
+                type: 'options',
+                options: [
+                    {
+                        name: 'Disabled',
+                        value: 'disabled',
+                        description: 'Do not pass binary data to tools',
+                    },
+                    {
+                        name: 'Automatic',
+                        value: 'auto',
+                        description: 'Automatically extract and mount binary files for tools',
+                    },
+                    {
+                        name: 'Manual',
+                        value: 'manual',
+                        description: 'Pass binary metadata to tools but let them handle mounting',
+                    },
+                ],
+                default: 'disabled',
+                description: 'How to handle binary data from input items and make it available to tools',
+            },
+            {
+                displayName: 'Max Binary File Size (MB)',
+                name: 'maxBinaryFileSize',
+                type: 'number',
+                default: 100,
+                typeOptions: {
+                    minValue: 1,
+                    maxValue: 1000,
+                },
+                description: 'Maximum size for individual binary files (in MB). Files larger than this will be skipped with a warning.',
+                displayOptions: {
+                    show: {
+                        binaryInputMode: ['auto', 'manual'],
+                    },
+                },
+            },
+            {
+                displayName: 'Binary File Types',
+                name: 'allowedBinaryTypes',
+                type: 'multiOptions',
+                options: [
+                    {
+                        name: 'Images (png, jpg, gif, webp, svg)',
+                        value: 'images',
+                        description: 'Image files for visual processing',
+                    },
+                    {
+                        name: 'Documents (pdf, doc, docx, txt)',
+                        value: 'documents',
+                        description: 'Document files for text extraction',
+                    },
+                    {
+                        name: 'Data Files (json, csv, xml, yaml)',
+                        value: 'data',
+                        description: 'Structured data files',
+                    },
+                    {
+                        name: 'Archives (zip, tar, gz)',
+                        value: 'archives',
+                        description: 'Compressed file archives',
+                    },
+                    {
+                        name: 'Code Files (js, ts, py, java, etc)',
+                        value: 'code',
+                        description: 'Source code files',
+                    },
+                    {
+                        name: 'All Files',
+                        value: 'all',
+                        description: 'Allow all file types',
+                    },
+                ],
+                default: ['images', 'documents', 'data'],
+                description: 'Types of binary files to process. Files with other types will be skipped.',
+                displayOptions: {
+                    show: {
+                        binaryInputMode: ['auto', 'manual'],
+                    },
+                },
+            },
         ],
     },
     {

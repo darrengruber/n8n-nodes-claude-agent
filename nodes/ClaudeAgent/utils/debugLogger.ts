@@ -105,6 +105,12 @@ export class DebugLogger {
         this.log(`${separator}`);
     }
 
+    logWarning(message: string, data?: any) {
+        if (!this.enabled) return;
+
+        this.log(`⚠️  WARNING: ${message}`, data);
+    }
+
     logError(message: string, error: any) {
         if (!this.enabled) return;
 

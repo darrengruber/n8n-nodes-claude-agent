@@ -5,3 +5,4 @@ export * from './memoryProcessor';
 export * from './mcpAdapter';
 export * from './turnFormatter';
 export * from './debugLogger';
+export * from './binaryInputProcessor';

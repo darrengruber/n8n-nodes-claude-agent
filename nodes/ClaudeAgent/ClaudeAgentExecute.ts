@@ -22,6 +22,7 @@ import { buildPromptWithMemory, addOutputParserInstructions } from './utils';
 import { processSdkMessages, saveMemoryContextSafe, formatOutputResult } from './utils/outputFormatter';
 
 import { processConnectedTools } from './utils/toolProcessor';
+import { cleanupBinaryInput } from './utils/binaryInputProcessor';
 import { initializeDockerClient, removeVolume, getWorkspaceVolumeName } from '../RunContainer/ContainerHelpers';
 
 /**
@@ -39,6 +40,8 @@ export async function claudeAgentExecute(
 
         console.log('[ClaudeAgent] Logger created, log path:', logger.getLogPath());
         logger.logSection(`Processing Item ${itemIndex}`);
+
+        let binaryInputResult: any = undefined; // Declare outside try block
 
         try {
             // Get and validate basic parameters
@@ -83,10 +86,12 @@ export async function claudeAgentExecute(
             // Initialize array to collect binary artifacts from tools
             const binaryArtifacts: any[] = [];
 
-            // Process connected tools
-            const { mcpServers, disallowedTools, toolsCount } = await processConnectedTools(
-                this, itemIndex, !!options.verbose, logger, binaryArtifacts
+            // Process connected tools with binary input processing
+            const { mcpServers, disallowedTools, toolsCount, binaryInputResult: processedBinaryResult } = await processConnectedTools(
+                this, itemIndex, !!options.verbose, logger, binaryArtifacts, options
             );
+            
+            binaryInputResult = processedBinaryResult; // Assign to outer scope variable
 
             // Process working directory
             const finalWorkingDirectory = processWorkingDirectory(options.workingDirectory);
@@ -147,6 +152,16 @@ export async function claudeAgentExecute(
                 logger.logError('Failed to cleanup workspace volume', cleanupError);
             }
 
+            // Cleanup binary input temporary directory
+            try {
+                await cleanupBinaryInput(binaryInputResult?.tempDirectory);
+                if (binaryInputResult?.tempDirectory) {
+                    logger.log(`Cleaned up binary input temp directory: ${binaryInputResult.tempDirectory}`);
+                }
+            } catch (cleanupError) {
+                logger.logError('Failed to cleanup binary input temp directory', cleanupError);
+            }
+
             const executionData: INodeExecutionData = {
                 json: jsonResult as ClaudeAgentResultData,
                 pairedItem: {
@@ -157,6 +172,7 @@ export async function claudeAgentExecute(
             // Merge collected binary artifacts into execution data
             if (binaryArtifacts.length > 0) {
                 logger.log(`Merging ${binaryArtifacts.length} binary artifacts into output`);
+                console.log(`[ClaudeAgent] Merging ${binaryArtifacts.length} binary artifacts:`, binaryArtifacts.map(a => ({ fileName: a.fileName, mimeType: a.mimeType, size: a.data?.length })));
                 executionData.binary = {};
 
                 for (const artifact of binaryArtifacts) {
@@ -167,6 +183,7 @@ export async function claudeAgentExecute(
                         key = `${artifact.fileName}_${counter++}`;
                     }
 
+                    console.log(`[ClaudeAgent] Adding binary artifact: ${key} (${artifact.mimeType}, ${artifact.data?.length} bytes)`);
                     executionData.binary[key] = {
                         data: artifact.data,
                         mimeType: artifact.mimeType,
@@ -174,12 +191,25 @@ export async function claudeAgentExecute(
                         fileSize: String(artifact.data.length), // Convert to string as per IBinaryData interface
                     };
                 }
+            } else {
+                logger.log('No binary artifacts to merge');
+                console.log('[ClaudeAgent] No binary artifacts collected during execution');
             }
 
             returnData.push(executionData);
 
         } catch (error) {
             logger.logError('Execution failed', error);
+
+            // Cleanup binary input temporary directory even on error
+            try {
+                await cleanupBinaryInput(binaryInputResult?.tempDirectory);
+                if (binaryInputResult?.tempDirectory) {
+                    logger.log(`Cleaned up binary input temp directory on error: ${binaryInputResult.tempDirectory}`);
+                }
+            } catch (cleanupError) {
+                logger.logError('Failed to cleanup binary input temp directory on error', cleanupError);
+            }
 
             if (canContinueOnFail(this) && this.continueOnFail()) {
                 returnData.push({

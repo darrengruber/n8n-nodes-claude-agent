@@ -5,7 +5,8 @@ import {
 } from 'n8n-workflow';
 import { DebugLogger } from './debugLogger';
 import { processToolsForAgent } from './mcpAdapter';
-import { ToolProcessingResult } from '../interfaces';
+import { ToolProcessingResult, ClaudeAgentOptions } from '../interfaces';
+import { processBinaryInput, cleanupBinaryInput } from './binaryInputProcessor';
 
 /**
  * Processes tools connected to the node
@@ -15,12 +16,14 @@ export async function processConnectedTools(
     itemIndex: number,
     verbose: boolean,
     logger: DebugLogger,
-    binaryArtifacts?: any[]
-): Promise<ToolProcessingResult & { toolsCount: number }> {
+    binaryArtifacts?: any[],
+    options?: ClaudeAgentOptions
+): Promise<ToolProcessingResult & { toolsCount: number; binaryInputResult?: any }> {
     logger.logSection('Tool Processing');
     let mcpServers: Record<string, any> = {};
     let disallowedTools: string[] = ['Bash', 'WebFetch']; // Default disallowed
     let toolsCount = 0;
+    let binaryInputResult: any = undefined;
 
     try {
         const rawTools = (await context.getInputConnectionData(NodeConnectionTypes.AiTool, itemIndex)) as any[];
@@ -38,6 +41,11 @@ export async function processConnectedTools(
             }
         }
 
+        // Process binary input data if options are provided
+        if (options) {
+            binaryInputResult = await processBinaryInput(context, itemIndex, options, logger);
+        }
+
         // Enrich tools with current item's binary data for dynamic descriptions
         const currentItem = context.getInputData()[itemIndex];
         if (currentItem) {
@@ -46,6 +54,11 @@ export async function processConnectedTools(
                     tool.metadata = {};
                 }
                 tool.metadata.currentItem = currentItem;
+                
+                // Add binary input metadata to tool
+                if (binaryInputResult) {
+                    tool.metadata.binaryInput = binaryInputResult;
+                }
 
                 // For RunContainer tools, try to get the workspaceInstructions parameter
                 // This is a bit tricky since we don't have direct access to the tool node's parameters
@@ -55,7 +68,9 @@ export async function processConnectedTools(
 
             logger.log('Enriched tools with current item data', {
                 hasBinaryData: !!currentItem.binary,
-                binaryKeys: currentItem.binary ? Object.keys(currentItem.binary) : []
+                binaryKeys: currentItem.binary ? Object.keys(currentItem.binary) : [],
+                binaryInputProcessed: !!binaryInputResult,
+                binaryInputFiles: binaryInputResult?.metadata?.length || 0
             });
         }
 
@@ -80,7 +95,8 @@ export async function processConnectedTools(
     return {
         mcpServers,
         disallowedTools,
-        toolsCount
+        toolsCount,
+        binaryInputResult
     };
 }
 
@@ -97,4 +113,13 @@ export function logToolResults(
         mcpServerNames: Object.keys(result.mcpServers),
         disallowedTools: result.disallowedTools
     });
+}
+
+/**
+ * Cleanup binary input resources
+ */
+export async function cleanupToolProcessing(binaryInputResult: any): Promise<void> {
+    if (binaryInputResult?.tempDirectory) {
+        await cleanupBinaryInput(binaryInputResult.tempDirectory);
+    }
 }
