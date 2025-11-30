@@ -313,20 +313,52 @@ export async function adaptToMcpTools(
             const workspaceInstructions = '\n\nWorkspace: A persistent volume is mounted at /agent/workspace. Use this directory to persist files between turns.';
             enhancedDescription += workspaceInstructions;
 
-            // Check for binary data and list input files
-            if (t.metadata?.currentItem?.binary) {
+            // Check for binary input processing result
+            if (t.metadata?.binaryInput) {
+                const binaryInput = t.metadata.binaryInput;
+                
+                if (binaryInput.metadata && binaryInput.metadata.length > 0) {
+                    // Use processed binary input metadata
+                    const byType = binaryInput.metadata.reduce((acc: any, file: any) => {
+                        acc[file.fileType] = (acc[file.fileType] || []).concat(file);
+                        return acc;
+                    }, {});
+
+                    let fileListing = '\n\nAvailable Input Files:\n';
+                    
+                    for (const [type, files] of Object.entries(byType)) {
+                        fileListing += `\n${type.charAt(0).toUpperCase() + type.slice(1)} Files:\n`;
+                        for (const file of files as any[]) {
+                            const sizeMB = Math.round(file.fileSize / 1024 / 1024 * 100) / 100;
+                            const location = file.filePath ? ` (mounted at ${file.filePath})` : ' (metadata only)';
+                            fileListing += `  - ${file.fileName} (${file.mimeType}, ${sizeMB}MB)${location}\n`;
+                        }
+                    }
+                    
+                    enhancedDescription += fileListing;
+                    logger.log(`Enhanced description with ${binaryInput.metadata.length} processed binary files`);
+                }
+
+                // Add warnings about skipped files if any
+                if (binaryInput.skippedFiles && binaryInput.skippedFiles.length > 0) {
+                    const skippedWarning = `\n\nNote: ${binaryInput.skippedFiles.length} file(s) were skipped:\n${binaryInput.skippedFiles.map((f: any) => `  - ${f.fileName || f.key}: ${f.reason}`).join('\n')}`;
+                    enhancedDescription += skippedWarning;
+                    logger.logWarning(`Added ${binaryInput.skippedFiles.length} skipped file warnings to description`);
+                }
+            } else if (t.metadata?.currentItem?.binary) {
+                // Fallback to original logic for backward compatibility
                 const binaryData = t.metadata.currentItem.binary;
                 const fileNames = Object.entries(binaryData).map(([key, data]: [string, any]) => {
                     return data.fileName || key;
                 });
 
                 if (fileNames.length > 0) {
-                    enhancedDescription += `\n\nInput Files: The following files are available in /agent/workspace/input:\n${fileNames.map(f => `  - ${f}`).join('\n')}`;
-                    logger.log(`Listed ${fileNames.length} input files in description`);
+                    enhancedDescription += `\n\nInput Files: The following files are available:\n${fileNames.map(f => `  - ${f}`).join('\n')}`;
+                    logger.log(`Listed ${fileNames.length} input files in description (legacy mode)`);
                 }
             } else {
                 // No binary data, just mention where inputs would be
-                enhancedDescription += '\n\nIf binary input is enabled, input files will be available in /agent/workspace/input.';
+                enhancedDescription += '\n\nIf binary input is enabled, input files will be available to tools.';
             }
 
             // Add output instructions
@@ -374,6 +406,13 @@ export async function adaptToMcpTools(
 
                 const result = await method(input);
 
+                logger?.log(`Tool ${t.name} execution result:`, {
+                    resultType: typeof result,
+                    isArray: Array.isArray(result),
+                    resultLength: Array.isArray(result) ? result.length : 'N/A',
+                    hasBinary: Array.isArray(result) ? result.some((item: any) => item.binary) : 'N/A'
+                });
+
                 if (verbose && logger) {
                     logger.log(`Tool ${t.name} result:`, result);
                 }
@@ -382,6 +421,80 @@ export async function adaptToMcpTools(
                 let outputText = '';
                 if (typeof result === 'string') {
                     outputText = result;
+                    
+                    // Check if this is a JSON string that might contain binary data
+                    try {
+                        logger?.log(`JSON parsing attempt for ${t.name}:`, {
+                            resultType: typeof result,
+                            resultLength: result.length,
+                            resultPreview: result.substring(0, 200) + (result.length > 200 ? '...' : '')
+                        });
+                        
+                        let parsedResult = JSON.parse(result);
+                        
+                        // Debug: Log the full structure to compare with original
+                        logger?.log(`Parsed result structure for ${t.name}:`, {
+                            isArray: Array.isArray(parsedResult),
+                            length: parsedResult.length,
+                            firstItemKeys: parsedResult.length > 0 ? Object.keys(parsedResult[0]) : [],
+                            fullResult: JSON.stringify(parsedResult, null, 2)
+                        });
+                        
+                        // Handle case where result is a string containing JSON array (double-encoded JSON)
+                        if (typeof parsedResult === 'string') {
+                            logger?.log(`Tool ${t.name} returned double-encoded JSON string, parsing again...`);
+                            // Unescape the string before parsing again
+                            const unescapedResult = parsedResult.replace(/\\"/g, '"').replace(/\\\\n/g, '\\n');
+                            parsedResult = JSON.parse(unescapedResult);
+                        }
+                        
+                        if (Array.isArray(parsedResult) && parsedResult.length > 0) {
+                            logger?.log(`Tool ${t.name} returned JSON array with ${parsedResult.length} items`);
+                            
+                            // Process as array result for binary extraction
+                            for (let i = 0; i < parsedResult.length; i++) {
+                                const item = parsedResult[i];
+                                logger?.log(`Processing item ${i}:`, {
+                                    hasBinary: !!item.binary,
+                                    binaryKeys: item.binary ? Object.keys(item.binary) : [],
+                                    itemKeys: Object.keys(item)
+                                });
+                                
+                                if (item.binary && binaryArtifacts) {
+                                    logger?.log(`Found binary data in item ${i}:`, Object.keys(item.binary));
+                                    for (const [key, binaryData] of Object.entries(item.binary)) {
+                                        logger?.log(`Processing binary data for key: ${key}`, {
+                                            hasData: !!(binaryData as any).data,
+                                            fileName: (binaryData as any).fileName,
+                                            mimeType: (binaryData as any).mimeType
+                                        });
+                                        
+                                        if (binaryData && (binaryData as any).data) {
+                                            const fileName = (binaryData as any).fileName || key;
+                                            const mimeType = (binaryData as any).mimeType || 'application/octet-stream';
+                                            const dataSize = Buffer.from((binaryData as any).data, 'base64').length;
+
+                                            logger?.log(`Found binary artifact: ${fileName} (${mimeType}, ${dataSize} bytes)`);
+                                            logger?.log(`Collecting binary artifact from tool ${t.name}`);
+
+                                            binaryArtifacts.push({
+                                                toolName: t.name,
+                                                fileName,
+                                                mimeType,
+                                                data: (binaryData as any).data,
+                                                description: `Generated by tool ${t.name}`
+                                            });
+                                        }
+                                    }
+                                } else {
+                                    logger?.log(`No binary data found in item ${i}`);
+                                }
+                            }
+                        }
+                    } catch (parseError) {
+                        // Not a JSON string, treat as regular text output
+                        logger?.log(`Result is not JSON, treating as text output. Parse error: ${parseError.message}`);
+                    }
                 } else if (Array.isArray(result) && result.length > 0) {
                     // Handle INodeExecutionData[][] (standard n8n node output) or INodeExecutionData[]
                     let items: any[] = [];
@@ -404,12 +517,15 @@ export async function adaptToMcpTools(
 
                             // Check for binary data
                             if (item.binary && binaryArtifacts) {
+                                console.log(`[MCP Adapter] Tool ${t.name} returned binary data:`, Object.keys(item.binary));
                                 for (const [key, binaryData] of Object.entries(item.binary)) {
                                     if (binaryData && (binaryData as any).data) {
                                         const fileName = (binaryData as any).fileName || key;
                                         const mimeType = (binaryData as any).mimeType || 'application/octet-stream';
+                                        const dataSize = Buffer.from((binaryData as any).data, 'base64').length;
 
                                         logger?.log(`Found binary artifact: ${fileName} (${mimeType})`);
+                                        console.log(`[MCP Adapter] Collecting binary artifact: ${fileName} (${mimeType}, ${dataSize} bytes) from tool ${t.name}`);
 
                                         binaryArtifacts.push({
                                             toolName: t.name,
